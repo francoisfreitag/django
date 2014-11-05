@@ -24,6 +24,12 @@ DEFAULT_LOGGING = {
         'require_debug_true': {
             '()': 'django.utils.log.RequireDebugTrue',
         },
+        'stdout': {
+            '()': 'django.utils.log.StdoutFilter',
+        },
+        'stderr': {
+            '()': 'django.utils.log.StderrFilter',
+        },
     },
     'formatters': {
         'django.server': {
@@ -37,6 +43,17 @@ DEFAULT_LOGGING = {
             'level': 'INFO',
             'filters': ['require_debug_true'],
             'class': 'logging.StreamHandler',
+        },
+        'command_stdout': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stdout',
+            'filters': ['stdout'],
+        },
+        'command_stderr': {
+            'level': 'WARNING',
+            'class': 'logging.StreamHandler',
+            'filters': ['stderr'],
         },
         'django.server': {
             'level': 'INFO',
@@ -58,6 +75,11 @@ DEFAULT_LOGGING = {
         'django': {
             'handlers': ['console', 'mail_admins'],
             'level': 'INFO',
+        },
+        'django.command': {
+            'handlers': ['command_stdout', 'command_stderr'],
+            'level': 'INFO',
+            'propagate': False,
         },
         'django.progress': {
             'handlers': ['progress'],
@@ -244,3 +266,13 @@ def log_response(message, *args, response=None, request=None, logger=request_log
         exc_info=exc_info,
     )
     response._has_been_logged = True
+
+
+class StdoutFilter(logging.Filter):
+    def filter(self, record):
+        return record.levelno <= logging.INFO
+
+
+class StderrFilter(logging.Filter):
+    def filter(self, record):
+        return record.levelno >= logging.WARNING

@@ -2,6 +2,7 @@
 Base classes for writing management commands (named commands which can
 be executed through ``django-admin`` or ``manage.py``).
 """
+import logging
 import os
 import sys
 import warnings
@@ -13,7 +14,9 @@ from django.core import checks
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management.color import color_style, no_style
 from django.db import DEFAULT_DB_ALIAS, connections
-from django.utils.deprecation import RemovedInDjango41Warning
+from django.utils.deprecation import (
+    RemovedInDjango40Warning, RemovedInDjango41Warning,
+)
 
 ALL_CHECKS = '__all__'
 
@@ -148,6 +151,12 @@ class OutputWrapper(TextIOBase):
         return hasattr(self._out, 'isatty') and self._out.isatty()
 
     def write(self, msg='', style_func=None, ending=None):
+        warnings.warn(
+            "The 'stdout' and 'stderr' attributes are deprecated.\n"
+            "Use the new 'logger' attribute instead.",
+            RemovedInDjango40Warning,
+            stacklevel=2
+        )
         ending = self.ending if ending is None else ending
         if ending and not msg.endswith(ending):
             msg += ending
@@ -241,6 +250,7 @@ class BaseCommand:
     stealth_options = ()
 
     def __init__(self, stdout=None, stderr=None, no_color=False, force_color=False):
+        self.logger = logging.getLogger('django.command')
         self.stdout = OutputWrapper(stdout or sys.stdout)
         self.stderr = OutputWrapper(stderr or sys.stderr)
         if no_color and force_color:
@@ -358,9 +368,10 @@ class BaseCommand:
 
             # SystemCheckError takes care of its own formatting.
             if isinstance(e, SystemCheckError):
-                self.stderr.write(str(e), lambda x: x)
+                self.logger.error(str(e))
             else:
-                self.stderr.write('%s: %s' % (e.__class__.__name__, e))
+                self.logger.error('%s: %s' % (e.__class__.__name__,
+                                              e.args[0]))
             sys.exit(e.returncode)
         finally:
             try:
@@ -404,7 +415,7 @@ class BaseCommand:
                     output,
                     self.style.SQL_KEYWORD(connection.ops.end_transaction_sql()),
                 )
-            self.stdout.write(output)
+            self.logger.info(output)
         return output
 
     def check(self, app_configs=None, tags=None, display_num_errors=False,
@@ -472,9 +483,9 @@ class BaseCommand:
 
         if msg:
             if visible_issue_count:
-                self.stderr.write(msg, lambda x: x)
+                self.logger.error(msg)
             else:
-                self.stdout.write(msg)
+                self.logger.info(msg)
 
     def check_migrations(self):
         """

@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import connection
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch, QuerySet
 from django.db.models.query import get_prefetcher
 from django.test import TestCase, override_settings
 from django.utils import six
@@ -12,8 +12,8 @@ from django.utils.encoding import force_text
 from .models import (
     Author, Author2, AuthorAddress, AuthorWithAge, Bio, Book, Bookmark,
     BookReview, BookWithYear, Comment, Department, Employee, FavoriteAuthors,
-    House, LessonEntry, Person, Qualification, Reader, Room, TaggedItem,
-    Teacher, WordEntry,
+    GlobalTeam, House, LessonEntry, Person, Qualification, Reader, Room, TaggedItem,
+    Teacher, User, UserProfile, WordEntry,
 )
 
 
@@ -1219,3 +1219,50 @@ class Ticket21760Tests(TestCase):
         prefetcher = get_prefetcher(self.rooms[0], 'house')[0]
         queryset = prefetcher.get_prefetch_queryset(list(Room.objects.all()))[0]
         self.assertNotIn(' JOIN ', force_text(queryset.query))
+
+
+class Ticket27123Tests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        users = [User.objects.create(name=c) for c in 'abcd']
+        profiles = [UserProfile.objects.create(user=user) for user in users]
+
+        team1 = GlobalTeam.objects.create(team_name='Team 1', team_admin=profiles[0])
+        team2 = GlobalTeam.objects.create(team_name='Team 2', team_admin=profiles[0])
+
+        team1.user_profiles.add(*profiles[:3])
+        team2.user_profiles.add(profiles[3])
+
+    def test_reproduction(self):
+        my_teams = GlobalTeam.objects.prefetch_related(
+            'user_profiles',
+        ).annotate(
+            user_cnt=(
+                Count('user_profiles', distinct=True) + 1
+            ),
+        ).distinct()
+
+        self.assertEqual(len(my_teams), 2)
+
+        self.assertQuerysetEqual(
+            my_teams[0].user_profiles.all(),
+            ['<UserProfile: a>', '<UserProfile: b>', '<UserProfile: c>'],
+            ordered=False,
+        )
+        self.assertQuerysetEqual(
+            my_teams[1].user_profiles.all(),
+            ['<UserProfile: d>'],
+            ordered=False,
+        )
+
+        evaluated = list(my_teams)
+        self.assertQuerysetEqual(
+            evaluated[0].user_profiles.all(),
+            ['<UserProfile: a>', '<UserProfile: b>', '<UserProfile: c>'],
+            ordered=False,
+        )
+        self.assertQuerysetEqual(
+            evaluated[1].user_profiles.all(),
+            ['<UserProfile: d>'],
+            ordered=False,
+        )

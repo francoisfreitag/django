@@ -285,3 +285,21 @@ class Flea(models.Model):
     current_room = models.ForeignKey(Room, models.SET_NULL, related_name='fleas', null=True)
     pets_visited = models.ManyToManyField(Pet, related_name='fleas_hosted')
     people_visited = models.ManyToManyField(Person, related_name='fleas_hosted')
+
+
+# Ticket #27123: Unknown Problem
+class User(models.Model):
+    name = models.CharField(max_length=20, unique=True)
+
+
+class UserProfile(models.Model):
+    user = models.OneToOneField('User', related_name='profile', on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.user.name
+
+
+class GlobalTeam(models.Model):
+    team_name = models.CharField(max_length=100)
+    user_profiles = models.ManyToManyField('UserProfile', related_name='user_teams')
+    team_admin = models.ForeignKey('UserProfile', related_name='head_teams', on_delete=models.CASCADE)

@@ -9,7 +9,7 @@ from django.db.migrations.state import ModelState, ProjectState
 from django.db.models.fields import NOT_PROVIDED
 from django.db.transaction import atomic
 from django.db.utils import IntegrityError
-from django.test import SimpleTestCase, override_settings, skipUnlessDBFeature
+from django.test import SimpleTestCase, modify_settings, override_settings, skipUnlessDBFeature
 
 from .models import FoodManager, FoodQuerySet, UnicodeModel
 from .test_base import MigrationTestBase
@@ -1444,6 +1444,53 @@ class OperationTests(OperationTestBase):
         self.assertEqual(definition[0], "AddIndex")
         self.assertEqual(definition[1], [])
         self.assertEqual(definition[2], {'model_name': "Pony", 'index': index})
+
+    def test_add_index_on_charfield_pk(self):
+        pony_creation = migrations.CreateModel(
+            "Pony",
+            [
+                ("name", models.CharField(max_length=10, primary_key=True)),
+            ],
+        )
+        van_creation = migrations.CreateModel(
+            "Van",
+            [
+                ("id", models.AutoField(primary_key=True)),
+            ],
+        )
+        van_pony = migrations.AddField(
+            "Van",
+            "pony",
+            models.ForeignKey("Pony", models.CASCADE, db_index=False),
+        )
+        van_pony_index = migrations.AlterField(
+            "Van",
+            "pony",
+            models.ForeignKey("Pony", models.CASCADE, db_index=True),
+        )
+
+        project_state = ProjectState()
+        new_state = project_state.clone()
+
+        with connection.schema_editor() as editor:
+            pony_creation.state_forwards("test_adin", new_state)
+            pony_creation.database_forwards("test_adin", editor, project_state, new_state)
+
+            project_state = new_state.clone()
+            van_creation.state_forwards("test_adin", new_state)
+            van_creation.database_forwards("test_adin", editor, project_state, new_state)
+
+            project_state = new_state.clone()
+            van_pony.state_forwards("test_adin", new_state)
+            van_pony.database_forwards("test_adin", editor, project_state, new_state)
+
+            project_state = new_state.clone()
+            van_pony_index.state_forwards("test_adin", new_state)
+            van_pony_index.database_forwards("test_adin", editor, project_state, new_state)
+
+        self.assertIndexExists("test_adin_pony", ["name"])
+
+        import pdb; pdb.set_trace()  # XXX BREAKPOINT
 
     def test_remove_index(self):
         """

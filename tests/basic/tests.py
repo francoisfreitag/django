@@ -11,7 +11,7 @@ from django.test import (
 )
 from django.utils.translation import gettext_lazy
 
-from .models import Article, ArticleSelectOnSave, SelfRef
+from .models import Article, ArticleSelectOnSave, ArticleWithSummary, SelfRef
 
 
 class ModelInstanceCreationTests(TestCase):
@@ -739,3 +739,18 @@ class ModelRefreshTests(TestCase):
         a = Article.objects.create(pub_date=self._truncate_ms(datetime.now()))
         with self.assertNumQueries(0):
             a.refresh_from_db(fields=[])
+
+    def test_refresh_reverse_o2o(self):
+        older_instance = Article.objects.create(headline='headline', pub_date=datetime(2017, 3, 23))
+        try:
+            # Populate the related objects cache
+            older_instance.articlewithsummary
+        except ObjectDoesNotExist:
+            pass
+
+        newer_instance = Article.objects.get(pk=older_instance.pk)
+        related_obj = ArticleWithSummary.objects.create(article=newer_instance)
+
+        older_instance.refresh_from_db()
+        with self.assertNumQueries(1):
+            self.assertEqual(related_obj, older_instance.articlewithsummary)

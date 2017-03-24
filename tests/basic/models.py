@@ -16,6 +16,9 @@ class Article(models.Model):
     def __str__(self):
         return self.headline
 
+class ArticleWithSummary(models.Model):
+    article = models.OneToOneField(Article, models.CASCADE)
+    summary = models.TextField()
 
 class ArticleSelectOnSave(Article):
     class Meta:

@@ -40,17 +40,14 @@ class SelectTest(WidgetTest):
 
     def test_render_label_value(self):
         """
-        If the value corresponds to a label (but not to an option value), none
-        of the options are selected.
+        If the value corresponds to a label (but not to an option value), an
+        exception is raised.
         """
-        self.check_html(self.widget(choices=self.beatles), 'beatle', 'John', html=(
-            """<select name="beatle">
-            <option value="J">John</option>
-            <option value="P">Paul</option>
-            <option value="G">George</option>
-            <option value="R">Ringo</option>
-            </select>"""
-        ))
+        with self.assertRaisesMessage(
+            ValueError,
+            "Cannot select values ['John'], not part of choices: ['J', 'P', 'G', 'R']"
+        ):
+            self.widget(choices=self.beatles).render('beatle', 'John')
 
     def test_render_selected(self):
         """
@@ -350,7 +347,7 @@ class SelectTest(WidgetTest):
 
     def test_optgroups_integer_choices(self):
         """The option 'value' is the same type as what's in `choices`."""
-        groups = list(self.widget(choices=[[0, 'choice text']]).optgroups('name', ['vhs']))
+        groups = list(self.widget(choices=[[0, 'choice text']]).optgroups('name', [0]))
         label, options, index = groups[0]
         self.assertEqual(options[0]['value'], 0)
 

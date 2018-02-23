@@ -14,28 +14,29 @@ class GetDate(Form):
 class DateFieldTest(SimpleTestCase):
 
     def test_form_field(self):
-        a = GetDate({'mydate_month': '4', 'mydate_day': '1', 'mydate_year': '2008'})
+        next_year = date.today().year + 1
+        a = GetDate({'mydate_month': '4', 'mydate_day': '1', 'mydate_year': str(next_year)})
         self.assertTrue(a.is_valid())
-        self.assertEqual(a.cleaned_data['mydate'], date(2008, 4, 1))
+        self.assertEqual(a.cleaned_data['mydate'], date(next_year, 4, 1))
 
         # As with any widget that implements get_value_from_datadict(), we must
         # accept the input from the "as_hidden" rendering as well.
         self.assertHTMLEqual(
             a['mydate'].as_hidden(),
-            '<input type="hidden" name="mydate" value="2008-4-1" id="id_mydate">',
+            '<input type="hidden" name="mydate" value="%s-4-1" id="id_mydate">' % next_year,
         )
 
-        b = GetDate({'mydate': '2008-4-1'})
+        b = GetDate({'mydate': '%s-4-1' % next_year})
         self.assertTrue(b.is_valid())
-        self.assertEqual(b.cleaned_data['mydate'], date(2008, 4, 1))
+        self.assertEqual(b.cleaned_data['mydate'], date(next_year, 4, 1))
 
         # Invalid dates shouldn't be allowed
-        c = GetDate({'mydate_month': '2', 'mydate_day': '31', 'mydate_year': '2010'})
+        c = GetDate({'mydate_month': '2', 'mydate_day': '31', 'mydate_year': str(next_year)})
         self.assertFalse(c.is_valid())
         self.assertEqual(c.errors, {'mydate': ['Enter a valid date.']})
 
         # label tag is correctly associated with month dropdown
-        d = GetDate({'mydate_month': '1', 'mydate_day': '1', 'mydate_year': '2010'})
+        d = GetDate({'mydate_month': '1', 'mydate_day': '1', 'mydate_year': str(next_year)})
         self.assertIn('<label for="id_mydate_month">', d.as_p())
 
     @override_settings(USE_L10N=True)
@@ -109,7 +110,7 @@ class DateFieldTest(SimpleTestCase):
     @translation.override('nl')
     def test_form_label_association(self):
         # label tag is correctly associated with first rendered dropdown
-        a = GetDate({'mydate_month': '1', 'mydate_day': '1', 'mydate_year': '2010'})
+        a = GetDate({'mydate_month': '1', 'mydate_day': '1', 'mydate_year': date.today().year + 1})
         self.assertIn('<label for="id_mydate_day">', a.as_p())
 
     def test_datefield_1(self):

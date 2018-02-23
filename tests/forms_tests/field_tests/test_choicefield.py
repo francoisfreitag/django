@@ -79,6 +79,20 @@ class ChoiceFieldTest(FormFieldAssertionsMixin, SimpleTestCase):
         form = ChoiceFieldForm()
         self.assertEqual([('P', 'Paul')], list(form.fields['choicefield'].choices))
 
+    def test_choicefield_initial_data(self):
+        f = ChoiceField(initial='J', choices=[('J', 'John'), ('P', 'Paul')])
+        self.assertEqual('J', f.initial)
+
+    def test_choicefield_invalid_initial_callable(self):
+        def initial():
+            return 'K'
+        with self.assertRaisesMessage(ValueError, 'Invalid initial value: K'):
+            ChoiceField(initial=initial, choices=[('J', 'John'), ('P', 'Paul')])
+
+    def test_choicefield_invalid_initial_data(self):
+        with self.assertRaisesMessage(ValueError, 'Invalid initial value: K'):
+            ChoiceField(initial='K', choices=[('J', 'John'), ('P', 'Paul')])
+
     def test_choicefield_disabled(self):
         f = ChoiceField(choices=[('J', 'John'), ('P', 'Paul')], disabled=True)
         self.assertWidgetRendersTo(

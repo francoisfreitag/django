@@ -69,6 +69,9 @@ class MultipleChoiceFieldTest(SimpleTestCase):
         self.assertTrue(f.has_changed([1, 2], ['1']))
         self.assertTrue(f.has_changed([1, 2], ['1', '3']))
 
+    def test_todo_ff(self):
+        pass
+
     def test_disabled_has_changed(self):
         f = MultipleChoiceField(choices=[('1', 'One'), ('2', 'Two')], disabled=True)
         self.assertIs(f.has_changed('x', 'y'), False)

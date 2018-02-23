@@ -1255,7 +1255,7 @@ class SaveAsTests(TestCase):
         """
         response = self.client.post(reverse('admin:admin_views_person_change', args=(self.per1.pk,)), {
             '_saveasnew': '',
-            'gender': 'invalid',
+            'gender': '',
             '_addanother': 'fail',
         })
         self.assertContains(response, 'Please correct the errors below.')

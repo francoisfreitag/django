@@ -51,14 +51,11 @@ class SelectMultipleTest(WidgetTest):
         If the value corresponds to a label (but not to an option value), none
         of the options are selected.
         """
-        self.check_html(self.widget(choices=self.beatles), 'beatles', ['John'], html=(
-            """<select multiple name="beatles">
-            <option value="J">John</option>
-            <option value="P">Paul</option>
-            <option value="G">George</option>
-            <option value="R">Ringo</option>
-            </select>"""
-        ))
+        with self.assertRaisesMessage(
+            ValueError,
+            "Cannot select values ['John'], not part of choices: ['J', 'P', 'G', 'R']"
+        ):
+            self.widget(choices=self.beatles).render('beatles', ['John'])
 
     def test_multiple_options_same_value(self):
         """
@@ -79,14 +76,11 @@ class SelectMultipleTest(WidgetTest):
         If multiple values are given, but some of them are not valid, the valid
         ones are selected.
         """
-        self.check_html(self.widget(choices=self.beatles), 'beatles', ['J', 'G', 'foo'], html=(
-            """<select multiple name="beatles">
-            <option value="J" selected>John</option>
-            <option value="P">Paul</option>
-            <option value="G" selected>George</option>
-            <option value="R">Ringo</option>
-            </select>"""
-        ))
+        with self.assertRaisesMessage(
+            ValueError,
+            "Cannot select values ['foo'], not part of choices: ['J', 'P', 'G', 'R']"
+        ):
+            self.widget(choices=self.beatles).render('beatles', ['J', 'G', 'foo'])
 
     def test_compare_string(self):
         choices = [('1', '1'), ('2', '2'), ('3', '3')]

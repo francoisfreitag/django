@@ -572,7 +572,7 @@ class ChoiceWidget(Widget):
     def optgroups(self, name, value, attrs=None):
         """Return a list of optgroups for this widget."""
         groups = []
-        has_selected = False
+        selected = set()
 
         for index, (option_value, option_label) in enumerate(self.choices):
             if option_value is None:
@@ -590,17 +590,28 @@ class ChoiceWidget(Widget):
             groups.append((group_name, subgroup, index))
 
             for subvalue, sublabel in choices:
-                selected = (
+                is_selected = (
                     str(subvalue) in value and
-                    (not has_selected or self.allow_multiple_selected)
+                    (not selected or self.allow_multiple_selected)
                 )
-                has_selected |= selected
+                if is_selected:
+                    selected.add(subvalue)
                 subgroup.append(self.create_option(
-                    name, subvalue, sublabel, selected, index,
+                    name, subvalue, sublabel, is_selected, index,
                     subindex=subindex, attrs=attrs,
                 ))
                 if subindex is not None:
                     subindex += 1
+
+        if self.choices and value:
+            initial_values = {initial for initial in value if initial}
+            if initial_values > selected:
+                raise ValueError(
+                    "Cannot select values %s, not part of choices: %s" % (
+                        sorted(initial_values - selected),
+                        [choice for choice, label in self.choices],
+                    )
+                )
         return groups
 
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):

@@ -573,6 +573,7 @@ class ChoiceWidget(Widget):
         """Return a list of optgroups for this widget."""
         groups = []
         selected = set()
+        has_choices = True
 
         for index, (option_value, option_label) in enumerate(self.choices):
             if option_value is None:
@@ -602,8 +603,14 @@ class ChoiceWidget(Widget):
                 ))
                 if subindex is not None:
                     subindex += 1
+        else:
+            has_choices = False
 
-        if self.choices and value:
+        # Putting a bp here: self.choices is ModelChoiceIterator two times,
+        # then list. Why is it a list on the third time? Is that an issue?
+        # Why don't enumerate(self.choices) cause issues while self.choices
+        # here causes issues?
+        if value and self.choices:
             initial_values = {initial for initial in value if initial}
             if initial_values > selected:
                 raise ValueError(

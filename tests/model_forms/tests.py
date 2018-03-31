@@ -1514,6 +1514,7 @@ class ModelFormBasicTests(TestCase):
 
         c4 = Category.objects.create(name='Fourth', url='4th')
         w_bernstein = Writer.objects.create(name='Carl Bernstein')
+        import pdb; pdb.set_trace()
         self.assertHTMLEqual(
             f.as_ul(),
             '''<li>Headline: <input type="text" name="headline" maxlength="50" required></li>

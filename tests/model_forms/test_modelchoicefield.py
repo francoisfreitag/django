@@ -96,6 +96,26 @@ class ModelChoiceFieldTests(TestCase):
             (self.c3.pk, 'category Third'),
         ])
 
+    def test_choices_freshness(self):
+        f = forms.ModelChoiceField(Category.objects.all())
+
+        self.assertEqual(4, len(f.choices))
+        self.assertEqual(list(f.choices), [
+            ('', '---------'),
+            (self.c1.pk, 'Entertainment'),
+            (self.c2.pk, 'A test'),
+            (self.c3.pk, 'Third'),
+        ])
+        c4 = Category.objects.create(name='Fourth', slug='4th', url='4th')
+        self.assertEqual(5, len(f.choices))
+        self.assertEqual(list(f.choices), [
+            ('', '---------'),
+            (self.c1.pk, 'Entertainment'),
+            (self.c2.pk, 'A test'),
+            (self.c3.pk, 'Third'),
+            (c4.pk, 'Fourth'),
+        ])
+
     def test_deepcopies_widget(self):
         class ModelChoiceForm(forms.Form):
             category = forms.ModelChoiceField(Category.objects.all())
@@ -256,17 +276,6 @@ class ModelChoiceFieldTests(TestCase):
             (self.c2.pk, 'A test'),
             (self.c3.pk, 'Third'),
         ])
-
-    def test_queryset_result_cache_is_reused(self):
-        f = forms.ModelChoiceField(Category.objects.all())
-        with self.assertNumQueries(1):
-            # list() calls __len__() and __iter__(); no duplicate queries.
-            self.assertEqual(list(f.choices), [
-                ('', '---------'),
-                (self.c1.pk, 'Entertainment'),
-                (self.c2.pk, 'A test'),
-                (self.c3.pk, 'Third'),
-            ])
 
     def test_num_queries(self):
         """

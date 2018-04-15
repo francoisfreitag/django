@@ -1129,24 +1129,41 @@ class ModelChoiceIterator:
         self.field = field
         self.queryset = field.queryset
 
-    def __iter__(self):
-        if self.field.empty_label is not None:
-            yield ("", self.field.empty_label)
+    def queryset_for_iteration(self):
         queryset = self.queryset
         # Can't use iterator() when queryset uses prefetch_related()
         if not queryset._prefetch_related_lookups:
             queryset = queryset.iterator()
-        for obj in queryset:
+        return queryset
+
+    def __iter__(self):
+        if self.field.empty_label is not None:
+            yield ("", self.field.empty_label)
+        for obj in self.queryset_for_iteration():
             yield self.choice(obj)
 
+    def objects_count(self):
+        return self.queryset.count()
+
     def __len__(self):
-        return self.queryset.count() + (1 if self.field.empty_label is not None else 0)
+        return self.objects_count() + (1 if self.field.empty_label is not None else 0)
 
     def __bool__(self):
         return self.field.empty_label is not None or self.queryset.exists()
 
     def choice(self, obj):
         return (self.field.prepare_value(obj), self.field.label_from_instance(obj))
+
+
+class CachingModelChoiceIterator(ModelChoiceIterator):
+    def queryset_for_iteration(self):
+        return self.queryset
+
+    def objects_count(self):
+        return len(self.queryset)
+
+    def __bool__(self):
+        return self.__len__() > 0
 
 
 class ModelChoiceField(ChoiceField):

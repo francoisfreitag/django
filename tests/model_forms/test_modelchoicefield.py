@@ -2,7 +2,8 @@ import datetime
 
 from django import forms
 from django.core.validators import ValidationError
-from django.forms.models import ModelChoiceIterator
+from django.forms.models import CachingModelChoiceIterator, ModelChoiceIterator
+
 from django.forms.widgets import CheckboxSelectMultiple
 from django.template import Context, Template
 from django.test import TestCase
@@ -300,3 +301,25 @@ class ModelChoiceFieldTests(TestCase):
         )
         with self.assertNumQueries(2):
             template.render(Context({'form': CategoriesForm()}))
+
+
+class CachingModelChoiceIteratorTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.c1 = Category.objects.create(name='Entertainment', slug='entertainment', url='entertainment')
+        cls.c2 = Category.objects.create(name='A test', slug='test', url='test')
+
+    def test_queryset_is_cached(self):
+        class CachedModelChoiceField(forms.ModelChoiceField):
+            iterator = CachingModelChoiceIterator
+
+        f = CachedModelChoiceField(Category.objects.all())
+
+        with self.assertNumQueries(1):
+            self.assertIs(bool(f.choices), True)
+            self.assertEqual(3, len(f.choices))
+            self.assertEqual(list(f.choices), [
+                ('', '---------'),
+                (self.c1.pk, 'Entertainment'),
+                (self.c2.pk, 'A test'),
+            ])

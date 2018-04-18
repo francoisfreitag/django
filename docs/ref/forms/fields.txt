@@ -1113,6 +1113,8 @@ method::
     impractical when the number of entries increases. You should avoid using it
     for more than 100 items.
 
+    Maybe here?
+
     A single argument is required:
 
     .. attribute:: queryset

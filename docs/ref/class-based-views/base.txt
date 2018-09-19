@@ -24,9 +24,10 @@ MRO is an acronym for Method Resolution Order.
 
     **Method Flowchart**
 
-    1. :meth:`dispatch()`
-    2. :meth:`http_method_not_allowed()`
-    3. :meth:`options()`
+    1. :meth:`init()`
+    2. :meth:`dispatch()`
+    3. :meth:`http_method_not_allowed()`
+    4. :meth:`options()`
 
     **Example views.py**::
 
@@ -70,11 +71,16 @@ MRO is an acronym for Method Resolution Order.
         attributes.
 
         When the view is called during the request/response cycle, the
-        :class:`~django.http.HttpRequest` is assigned to the view's ``request``
-        attribute. Any positional and/or keyword arguments :ref:`captured from
-        the URL pattern <how-django-processes-a-request>` are assigned to the
-        ``args`` and ``kwargs`` attributes, respectively. Then :meth:`dispatch`
-        is called.
+        :meth:`init()` method assigns the :class:`~django.http.HttpRequest`
+        to the view's ``request`` attribute, and any positional and/or keyword
+        arguments :ref:`captured from the URL pattern
+        <how-django-processes-a-request>` to the ``args`` and ``kwargs``
+        attributes, respectively. Then :meth:`dispatch` is called.
+
+    .. method:: init(request, *args, **kwargs)
+
+        Initializes the view instance attributes: ``self.request``,
+        ``self.args`` and ``self.kwargs``.
 
     .. method:: dispatch(request, *args, **kwargs)
 
@@ -123,9 +129,10 @@ MRO is an acronym for Method Resolution Order.
 
     **Method Flowchart**
 
-    1. :meth:`~django.views.generic.base.View.dispatch()`
-    2. :meth:`~django.views.generic.base.View.http_method_not_allowed()`
-    3. :meth:`~django.views.generic.base.ContextMixin.get_context_data()`
+    1. :meth:`~django.views.generic.base.View.init()`
+    2. :meth:`~django.views.generic.base.View.dispatch()`
+    3. :meth:`~django.views.generic.base.View.http_method_not_allowed()`
+    4. :meth:`~django.views.generic.base.ContextMixin.get_context_data()`
 
     **Example views.py**::
 
@@ -184,9 +191,10 @@ MRO is an acronym for Method Resolution Order.
 
     **Method Flowchart**
 
-    1. :meth:`~django.views.generic.base.View.dispatch()`
-    2. :meth:`~django.views.generic.base.View.http_method_not_allowed()`
-    3. :meth:`get_redirect_url()`
+    1. :meth:`~django.views.generic.base.View.init()`
+    2. :meth:`~django.views.generic.base.View.dispatch()`
+    3. :meth:`~django.views.generic.base.View.http_method_not_allowed()`
+    4. :meth:`get_redirect_url()`
 
     **Example views.py**::
 

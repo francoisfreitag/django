@@ -164,7 +164,9 @@ Forms
 Generic Views
 ~~~~~~~~~~~~~
 
-* ...
+* Added a :meth:`~django.views.generic.base.View.init()` method to initialize
+  view's attributes before calling
+  :meth:`~django.views.generic.base.View.dispatch()`.
 
 Internationalization
 ~~~~~~~~~~~~~~~~~~~~
@@ -301,6 +303,11 @@ A model's ``Meta.ordering`` affecting ``GROUP BY`` queries (such as
 issue a deprecation warning with the advice to add an ``order_by()`` to retain
 the current query. ``Meta.ordering`` will be ignored in such queries starting
 in Django 3.1.
+
+Generic views should set instance attributes in :meth:`~django.views.generic.base.View.init()`
+----------------------------------------------------------------------------------------------
+
+Explain here.
 
 Miscellaneous
 -------------

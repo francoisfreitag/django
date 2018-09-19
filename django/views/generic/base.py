@@ -45,6 +45,14 @@ class View:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
+    def init(self, request, *args, **kwargs):
+        """
+        Hook to initialize attributes shared by several view methods.
+        """
+        self.request = request
+        self.args = args
+        self.kwargs = kwargs
+
     @classonlymethod
     def as_view(cls, **initkwargs):
         """Main entry point for a request-response process."""
@@ -62,9 +70,7 @@ class View:
             self = cls(**initkwargs)
             if hasattr(self, 'get') and not hasattr(self, 'head'):
                 self.head = self.get
-            self.request = request
-            self.args = args
-            self.kwargs = kwargs
+            self.init(request, *args, **kwargs)
             return self.dispatch(request, *args, **kwargs)
         view.view_class = cls
         view.view_initkwargs = initkwargs

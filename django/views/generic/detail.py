@@ -102,8 +102,11 @@ class SingleObjectMixin(ContextMixin):
 
 class BaseDetailView(SingleObjectMixin, View):
     """A base view for displaying a single object."""
-    def get(self, request, *args, **kwargs):
+    def init(self, request, *args, **kwargs):
+        super().init(request, *args, **kwargs)
         self.object = self.get_object()
+
+    def get(self, request, *args, **kwargs):
         context = self.get_context_data(object=self.object)
         return self.render_to_response(context)
 

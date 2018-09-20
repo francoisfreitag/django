@@ -7,6 +7,10 @@ class AutocompleteJsonView(BaseListView):
     paginate_by = 20
     model_admin = None
 
+    def init(self, request, *args, **kwargs):
+        self.term = request.GET.get('term', '')
+        super().init(request, *args, **kwargs)
+
     def get(self, request, *args, **kwargs):
         """
         Return a JsonResponse with search results of the form:
@@ -23,9 +27,7 @@ class AutocompleteJsonView(BaseListView):
         if not self.has_perm(request):
             return JsonResponse({'error': '403 Forbidden'}, status=403)
 
-        self.term = request.GET.get('term', '')
         self.paginator_class = self.model_admin.paginator
-        self.object_list = self.get_queryset()
         context = self.get_context_data()
         return JsonResponse({
             'results': [

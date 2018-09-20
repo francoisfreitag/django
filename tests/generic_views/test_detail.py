@@ -34,6 +34,10 @@ class DetailViewTest(TestCase):
         self.assertIsInstance(res.context['view'], View)
         self.assertTemplateUsed(res, 'generic_views/detail.html')
 
+    def test_initialize_members_early(self):
+        res = self.client.get('/detail/obj/restricted/')
+        self.assertEqual(res.status_code, 200)
+
     def test_detail_by_pk(self):
         res = self.client.get('/detail/author/%s/' % self.author1.pk)
         self.assertEqual(res.status_code, 200)

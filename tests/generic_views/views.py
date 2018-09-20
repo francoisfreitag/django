@@ -1,5 +1,6 @@
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.http import HttpResponse, Http404
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import generic
@@ -22,6 +23,31 @@ class ObjectDetail(generic.DetailView):
 
     def get_object(self):
         return {'foo': 'bar'}
+
+
+class CheckMixin:
+    check_attrs = frozenset()
+
+    def dispatch(self, request, *args, **kwargs):
+        for check_attr_name in self.check_attrs:
+            assert hasattr(self, check_attr_name)
+        return super().dispatch(request, *args, **kwargs)
+
+
+class ObjectCheckMixin(CheckMixin):
+    check_attr_name = ('object',)
+
+
+class ObjectListCheckMixin(CheckMixin):
+    check_attr_name = ('object_list',)
+
+
+class DateListCheckMixin(CheckMixin):
+    check_attr_name = ('date_list', 'object_list')
+
+
+class ObjectDetailInitCheck(ObjectCheckMixin, ObjectDetail):
+    pass
 
 
 class ArtistDetail(generic.DetailView):
@@ -55,6 +81,10 @@ class DictList(generic.ListView):
         {'first': 'Yoko', 'last': 'Ono'}
     ]
     template_name = 'generic_views/list.html'
+
+
+class DictListInitCheck(ObjectListCheckMixin, DictList):
+    pass
 
 
 class ArtistList(generic.ListView):
@@ -117,6 +147,10 @@ class AuthorCreate(generic.CreateView):
     fields = '__all__'
 
 
+class AuthorCreateInitCheck(ObjectCheckMixin, AuthorCreate):
+    pass
+
+
 class SpecializedAuthorCreate(generic.CreateView):
     model = Author
     form_class = AuthorForm
@@ -170,6 +204,10 @@ class SpecializedAuthorUpdate(generic.UpdateView):
         return reverse('author_detail', args=[self.object.id])
 
 
+class AuthorUpdateInitCheck(ObjectCheckMixin, NaiveAuthorUpdate):
+    pass
+
+
 class NaiveAuthorDelete(generic.DeleteView):
     queryset = Author.objects.all()
 
@@ -186,6 +224,10 @@ class SpecializedAuthorDelete(generic.DeleteView):
     success_url = reverse_lazy('authors_list')
 
 
+class AuthorDeleteInitCheck(ObjectCheckMixin, AuthorDelete):
+    pass
+
+
 class BookConfig:
     queryset = Book.objects.all()
     date_field = 'pubdate'
@@ -195,7 +237,15 @@ class BookArchive(BookConfig, generic.ArchiveIndexView):
     pass
 
 
+class BookArchiveInitCheck(DateListCheckMixin, BookArchive):
+    pass
+
+
 class BookYearArchive(BookConfig, generic.YearArchiveView):
+    pass
+
+
+class BookYearArchiveInitCheck(DateListCheckMixin, BookYearArchive):
     pass
 
 
@@ -203,7 +253,15 @@ class BookMonthArchive(BookConfig, generic.MonthArchiveView):
     pass
 
 
+class BookMonthArchiveInitCheck(DateListCheckMixin, BookMonthArchive):
+    pass
+
+
 class BookWeekArchive(BookConfig, generic.WeekArchiveView):
+    pass
+
+
+class BookWeekArchiveInitCheck(DateListCheckMixin, BookWeekArchive):
     pass
 
 
@@ -211,7 +269,15 @@ class BookDayArchive(BookConfig, generic.DayArchiveView):
     pass
 
 
+class BookDayArchiveInitCheck(DateListCheckMixin, BookDayArchive):
+    pass
+
+
 class BookTodayArchive(BookConfig, generic.TodayArchiveView):
+    pass
+
+
+class BookTodayArchiveInitCheck(DateListCheckMixin, BookTodayArchive):
     pass
 
 

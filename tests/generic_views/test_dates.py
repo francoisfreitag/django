@@ -4,6 +4,7 @@ from unittest import mock
 from django.core.exceptions import ImproperlyConfigured
 from django.test import TestCase, override_settings, skipUnlessDBFeature
 from django.test.utils import requires_tz_support
+from django.urls import resolve
 from django.utils import timezone
 
 from .models import Artist, Author, Book, BookSigning, Page
@@ -156,6 +157,10 @@ class ArchiveIndexViewTests(TestDataMixin, TestCase):
         self.assertEqual(list(res.context['latest']), list(Book.objects.order_by('-name').all()))
         self.assertTemplateUsed(res, 'generic_views/book_archive.html')
 
+    def test_initialize_members_early(self):
+        res = self.client.get('/dates/books/init-check/')
+        self.assertEqual(res.status_code, 200)
+
 
 @override_settings(ROOT_URLCONF='generic_views.urls')
 class YearArchiveViewTests(TestDataMixin, TestCase):
@@ -291,6 +296,10 @@ class YearArchiveViewTests(TestDataMixin, TestCase):
         self.assertIsNone(kwargs['previous_year'])
         self.assertIsNone(kwargs['next_year'])
 
+    def test_initialize_members_early(self):
+        res = self.client.get('/dates/books/2008/init-check/')
+        self.assertEqual(res.status_code, 200)
+
 
 @override_settings(ROOT_URLCONF='generic_views.urls')
 class MonthArchiveViewTests(TestDataMixin, TestCase):
@@ -423,6 +432,10 @@ class MonthArchiveViewTests(TestDataMixin, TestCase):
         res = self.client.get('/dates/books/2011/dec/')
         self.assertEqual(list(res.context['date_list']), list(sorted(res.context['date_list'])))
 
+    def test_initialize_members_early(self):
+        res = self.client.get('/dates/books/2008/oct/init-check/')
+        self.assertEqual(res.status_code, 200)
+
 
 @override_settings(ROOT_URLCONF='generic_views.urls')
 class WeekArchiveViewTests(TestDataMixin, TestCase):
@@ -523,6 +536,10 @@ class WeekArchiveViewTests(TestDataMixin, TestCase):
     def test_aware_datetime_week_view(self):
         BookSigning.objects.create(event_date=datetime.datetime(2008, 4, 2, 12, 0, tzinfo=timezone.utc))
         res = self.client.get('/dates/booksignings/2008/week/13/')
+        self.assertEqual(res.status_code, 200)
+
+    def test_initialize_members_early(self):
+        res = self.client.get('/dates/books/2008/week/39/init-check/')
         self.assertEqual(res.status_code, 200)
 
 
@@ -647,6 +664,10 @@ class DayArchiveViewTests(TestDataMixin, TestCase):
         bs.save()
         res = self.client.get('/dates/booksignings/2008/apr/2/')
         self.assertEqual(res.status_code, 404)
+
+    def test_initialize_members_early(self):
+        res = self.client.get('/dates/books/2008/oct/01/init-check/')
+        self.assertEqual(res.status_code, 200)
 
 
 @override_settings(ROOT_URLCONF='generic_views.urls')

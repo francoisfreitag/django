@@ -28,6 +28,7 @@ urlpatterns = [
 
     # DetailView
     path('detail/obj/', views.ObjectDetail.as_view()),
+    path('detail/obj/restricted/', views.ObjectDetailInitCheck.as_view()),
     path('detail/artist/<int:pk>/', views.ArtistDetail.as_view(), name='artist_detail'),
     path('detail/author/<int:pk>/', views.AuthorDetail.as_view(), name='author_detail'),
     path('detail/author/bycustompk/<foo>/', views.AuthorDetail.as_view(pk_url_kwarg='foo')),
@@ -66,6 +67,7 @@ urlpatterns = [
         'edit/authors/create/interpolate_redirect_nonascii/',
         views.NaiveAuthorCreate.as_view(success_url='/%C3%A9dit/author/{id}/update/'),
     ),
+    path('edit/authors/create/init-check/', views.AuthorCreateInitCheck.as_view()),
     path('edit/authors/create/restricted/', views.AuthorCreateRestricted.as_view()),
     re_path('^[eé]dit/authors/create/$', views.AuthorCreate.as_view()),
     path('edit/authors/create/special/', views.SpecializedAuthorCreate.as_view()),
@@ -86,6 +88,7 @@ urlpatterns = [
     re_path('^[eé]dit/author/(?P<pk>[0-9]+)/update/$', views.AuthorUpdate.as_view()),
     path('edit/author/update/', views.OneAuthorUpdate.as_view()),
     path('edit/author/<int:pk>/update/special/', views.SpecializedAuthorUpdate.as_view()),
+    path('edit/author/<int:pk>/update/init-check/', views.AuthorUpdateInitCheck.as_view(success_url='/list/authors/')),
     path('edit/author/<int:pk>/delete/naive/', views.NaiveAuthorDelete.as_view()),
     path(
         'edit/author/<int:pk>/delete/redirect/',
@@ -101,9 +104,11 @@ urlpatterns = [
     ),
     path('edit/author/<int:pk>/delete/', views.AuthorDelete.as_view()),
     path('edit/author/<int:pk>/delete/special/', views.SpecializedAuthorDelete.as_view()),
+    path('edit/author/<int:pk>/delete/init-check/', views.AuthorDeleteInitCheck.as_view()),
 
     # ArchiveIndexView
     path('dates/books/', views.BookArchive.as_view()),
+    path('dates/books/init-check/', views.BookArchiveInitCheck.as_view()),
     path('dates/books/context_object_name/', views.BookArchive.as_view(context_object_name='thingies')),
     path('dates/books/allow_empty/', views.BookArchive.as_view(allow_empty=True)),
     path('dates/books/template_name/', views.BookArchive.as_view(template_name='generic_views/list.html')),
@@ -119,6 +124,7 @@ urlpatterns = [
 
     # ListView
     path('list/dict/', views.DictList.as_view()),
+    path('list/dict/init-check/', views.DictListInitCheck.as_view()),
     path('list/dict/paginated/', views.DictList.as_view(paginate_by=1)),
     path('list/artists/', views.ArtistList.as_view(), name='artists_list'),
     path('list/authors/', views.AuthorList.as_view(), name='authors_list'),
@@ -149,6 +155,7 @@ urlpatterns = [
     # Mixing keyword and positional captures below is intentional; the views
     # ought to be able to accept either.
     path('dates/books/<int:year>/', views.BookYearArchive.as_view()),
+    path('dates/books/<int:year>/init-check/', views.BookYearArchiveInitCheck.as_view()),
     path('dates/books/<int:year>/make_object_list/', views.BookYearArchive.as_view(make_object_list=True)),
     path('dates/books/<int:year>/allow_empty/', views.BookYearArchive.as_view(allow_empty=True)),
     path('dates/books/<int:year>/allow_future/', views.BookYearArchive.as_view(allow_future=True)),
@@ -168,6 +175,7 @@ urlpatterns = [
     # MonthArchiveView
     path('dates/books/<int:year>/<int:month>/', views.BookMonthArchive.as_view(month_format='%m')),
     path('dates/books/<int:year>/<month>/', views.BookMonthArchive.as_view()),
+    path('dates/books/<int:year>/<month>/init-check/', views.BookMonthArchiveInitCheck.as_view()),
     path('dates/books/<int:year>/<month>/allow_empty/', views.BookMonthArchive.as_view(allow_empty=True)),
     path('dates/books/<int:year>/<month>/allow_future/', views.BookMonthArchive.as_view(allow_future=True)),
     path('dates/books/<int:year>/<month>/paginated/', views.BookMonthArchive.as_view(paginate_by=30)),
@@ -176,6 +184,7 @@ urlpatterns = [
 
     # WeekArchiveView
     path('dates/books/<int:year>/week/<int:week>/', views.BookWeekArchive.as_view()),
+    path('dates/books/<int:year>/week/<int:week>/init-check/', views.BookWeekArchiveInitCheck.as_view()),
     path('dates/books/<int:year>/week/<int:week>/allow_empty/', views.BookWeekArchive.as_view(allow_empty=True)),
     path('dates/books/<int:year>/week/<int:week>/allow_future/', views.BookWeekArchive.as_view(allow_future=True)),
     path('dates/books/<int:year>/week/<int:week>/paginated/', views.BookWeekArchive.as_view(paginate_by=30)),
@@ -185,6 +194,7 @@ urlpatterns = [
 
     # DayArchiveView
     path('dates/books/<int:year>/<int:month>/<int:day>/', views.BookDayArchive.as_view(month_format='%m')),
+    path('dates/books/<int:year>/<month>/<int:day>/init-check/', views.BookDayArchiveInitCheck.as_view()),
     path('dates/books/<int:year>/<month>/<int:day>/', views.BookDayArchive.as_view()),
     path('dates/books/<int:year>/<month>/<int:day>/allow_empty/', views.BookDayArchive.as_view(allow_empty=True)),
     path('dates/books/<int:year>/<month>/<int:day>/allow_future/', views.BookDayArchive.as_view(allow_future=True)),
@@ -198,6 +208,7 @@ urlpatterns = [
 
     # TodayArchiveView
     path('dates/books/today/', views.BookTodayArchive.as_view()),
+    path('dates/books/today/init-check/', views.BookTodayArchiveInitCheck.as_view()),
     path('dates/books/today/allow_empty/', views.BookTodayArchive.as_view(allow_empty=True)),
     path('dates/booksignings/today/', views.BookSigningTodayArchive.as_view()),
 

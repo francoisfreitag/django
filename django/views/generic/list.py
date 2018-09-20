@@ -138,8 +138,11 @@ class MultipleObjectMixin(ContextMixin):
 
 class BaseListView(MultipleObjectMixin, View):
     """A base view for displaying a list of objects."""
-    def get(self, request, *args, **kwargs):
+    def init(self, request, *args, **kwargs):
+        super().init(request, *args, **kwargs)
         self.object_list = self.get_queryset()
+
+    def get(self, request, *args, **kwargs):
         allow_empty = self.get_allow_empty()
 
         if not allow_empty:

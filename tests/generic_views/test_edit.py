@@ -210,6 +210,14 @@ class CreateViewTests(TestCase):
         with self.assertRaisesMessage(ImproperlyConfigured, message):
             MyCreateView().get_form_class()
 
+    def test_initialize_members_early(self):
+        res = self.client.post(
+            '/edit/authors/create/init-check/',
+            {'name': 'Randall Munroe', 'slug': 'randall-munroe'},
+        )
+        self.assertEqual(res.status_code, 302)
+        self.assertRedirects(res, '/list/authors/')
+
 
 @override_settings(ROOT_URLCONF='generic_views.urls')
 class UpdateViewTests(TestCase):
@@ -346,6 +354,18 @@ class UpdateViewTests(TestCase):
         self.assertRedirects(res, '/list/authors/')
         self.assertQuerysetEqual(Author.objects.all(), ['<Author: Randall Munroe (xkcd)>'])
 
+    def test_initialize_members_early(self):
+        a = Author.objects.create(
+            name='Randall Munroe',
+            slug='randall-munroe',
+        )
+        res = self.client.post(
+            '/edit/author/%d/update/init-check/' % a.pk,
+            {'name': 'Randall Munroe (xkcd)', 'slug': 'randall-munroe'},
+        )
+        self.assertEqual(res.status_code, 302)
+        self.assertRedirects(res, '/list/authors/')
+
 
 @override_settings(ROOT_URLCONF='generic_views.urls')
 class DeleteViewTests(TestCase):
@@ -413,3 +433,9 @@ class DeleteViewTests(TestCase):
         msg = 'No URL to redirect to. Provide a success_url.'
         with self.assertRaisesMessage(ImproperlyConfigured, msg):
             self.client.post('/edit/author/%d/delete/naive/' % a.pk)
+
+    def test_initialize_members_early(self):
+        a = Author.objects.create(**{'name': 'Randall Munroe', 'slug': 'randall-munroe'})
+        res = self.client.post('/edit/author/%d/delete/init-check/' % a.pk)
+        self.assertEqual(res.status_code, 302)
+        self.assertRedirects(res, '/list/authors/')

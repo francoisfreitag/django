@@ -69,6 +69,22 @@ class AutocompleteJsonViewTests(AdminViewBasicTestCase):
         response = self.client.get(self.url, {'term': ''})
         self.assertEqual(response.status_code, 302)
 
+    def test_initialize_members_early(self):
+        class CheckMixin:
+            def dispatch(self, request, *args, **kwargs):
+                assert hasattr(self, 'object_list')
+                assert hasattr(self, 'term')
+                return super().dispatch(request, *args, **kwargs)
+
+        class CheckAutocompleteJsonview(CheckMixin, AutocompleteJsonView):
+            pass
+
+        q = Question.objects.create(question='Is this a question?')
+        request = self.factory.get(self.url, {'term': 'is'})
+        request.user = self.superuser
+        response = CheckAutocompleteJsonView.as_view(**self.as_view_args)(request)
+        self.assertEqual(response.status_code, 200)
+
     def test_has_view_or_change_permission_required(self):
         """
         Users require the change permission for the related model to the

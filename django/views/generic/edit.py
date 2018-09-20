@@ -163,13 +163,9 @@ class BaseCreateView(ModelFormMixin, ProcessFormView):
 
     Using this base class requires subclassing to provide a response mixin.
     """
-    def get(self, request, *args, **kwargs):
+    def init(self, request, *args, **kwargs):
+        super().init(request, *args, **kwargs)
         self.object = None
-        return super().get(request, *args, **kwargs)
-
-    def post(self, request, *args, **kwargs):
-        self.object = None
-        return super().post(request, *args, **kwargs)
 
 
 class CreateView(SingleObjectTemplateResponseMixin, BaseCreateView):
@@ -185,13 +181,9 @@ class BaseUpdateView(ModelFormMixin, ProcessFormView):
 
     Using this base class requires subclassing to provide a response mixin.
     """
-    def get(self, request, *args, **kwargs):
+    def init(self, request, *args, **kwargs):
+        super().init(request, *args, **kwargs)
         self.object = self.get_object()
-        return super().get(request, *args, **kwargs)
-
-    def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        return super().post(request, *args, **kwargs)
 
 
 class UpdateView(SingleObjectTemplateResponseMixin, BaseUpdateView):
@@ -203,12 +195,15 @@ class DeletionMixin:
     """Provide the ability to delete objects."""
     success_url = None
 
+    def init(self, request, *args, **kwargs):
+        super().init(request, *args, **kwargs)
+        self.object = self.get_object()
+
     def delete(self, request, *args, **kwargs):
         """
         Call the delete() method on the fetched object and then redirect to the
         success URL.
         """
-        self.object = self.get_object()
         success_url = self.get_success_url()
         self.object.delete()
         return HttpResponseRedirect(success_url)

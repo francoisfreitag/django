@@ -30,6 +30,10 @@ class ListViewTests(TestCase):
         self.assertTemplateUsed(res, 'generic_views/list.html')
         self.assertEqual(res.context['object_list'][0]['first'], 'John')
 
+    def test_initialize_members_early(self):
+        res = self.client.get('/list/dict/init-check/')
+        self.assertEqual(res.status_code, 200)
+
     def test_queryset(self):
         res = self.client.get('/list/authors/')
         self.assertEqual(res.status_code, 200)

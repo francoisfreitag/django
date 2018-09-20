@@ -239,19 +239,15 @@ We'll demonstrate this with the ``Author`` model we used in the
             if not request.user.is_authenticated:
                 return HttpResponseForbidden()
 
-            # Look up the author we're interested in.
-            self.object = self.get_object()
-            # Actually record interest somehow here!
-
+            record_interest(self.object)
             return HttpResponseRedirect(reverse('author-detail', kwargs={'pk': self.object.pk}))
 
-In practice you'd probably want to record the interest in a key-value
-store rather than in a relational database, so we've left that bit
-out. The only bit of the view that needs to worry about using
+In practice you'd probably want to record the interest in a key-value store
+rather than in a relational database, so we've left that bit out. The only bit
+of the view that needs to worry about using
 :class:`~django.views.generic.detail.SingleObjectMixin` is where we want to
-look up the author we're interested in, which it just does with a simple call
-to ``self.get_object()``. Everything else is taken care of for us by the
-mixin.
+look up the author we're interested in. Everything else is taken care of for us
+by the mixin.
 
 We can hook this into our URLs easily enough:
 
@@ -320,9 +316,8 @@ Now we can write a new ``PublisherDetail``::
         paginate_by = 2
         template_name = "books/publisher_detail.html"
 
-        def get(self, request, *args, **kwargs):
+        def init(self, request, *args, **kwargs):
             self.object = self.get_object(queryset=Publisher.objects.all())
-            return super().get(request, *args, **kwargs)
 
         def get_context_data(self, **kwargs):
             context = super().get_context_data(**kwargs)
@@ -332,7 +327,7 @@ Now we can write a new ``PublisherDetail``::
         def get_queryset(self):
             return self.object.book_set.all()
 
-Notice how we set ``self.object`` within ``get()`` so we
+Notice how we set ``self.object`` within ``init()`` so we
 can use it again later in ``get_context_data()`` and ``get_queryset()``.
 If you don't set ``template_name``, the template will default to the normal
 :class:`ListView` choice, which in this case would be
@@ -469,7 +464,6 @@ Our new ``AuthorDetail`` looks like this::
         def post(self, request, *args, **kwargs):
             if not request.user.is_authenticated:
                 return HttpResponseForbidden()
-            self.object = self.get_object()
             form = self.get_form()
             if form.is_valid():
                 return self.form_valid(form)
@@ -555,7 +549,6 @@ template as ``AuthorDisplay`` is using on ``GET``::
         def post(self, request, *args, **kwargs):
             if not request.user.is_authenticated:
                 return HttpResponseForbidden()
-            self.object = self.get_object()
             return super().post(request, *args, **kwargs)
 
         def get_success_url(self):

@@ -11,9 +11,10 @@ from django.utils.module_loading import import_string
 request_logger = logging.getLogger('django.request')
 
 # Default logging for Django. This sends an email to the site admins on every
-# HTTP 500 error. Depending on DEBUG, all other log records are either sent to
-# the console (DEBUG=True) or discarded (DEBUG=False) by means of the
-# require_debug_true filter.
+# HTTP 500 error. Management commands print messages of level INFO to stdout,
+# and messages of higher level to stderr. Depending on DEBUG, all other log
+# records are either sent to the console (DEBUG=True) or discarded
+# (DEBUG=False) by means of the require_debug_true filter.
 DEFAULT_LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

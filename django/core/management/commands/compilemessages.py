@@ -66,7 +66,7 @@ class Command(BaseCommand):
 
         if find_command(self.program) is None:
             raise CommandError("Can't find %s. Make sure you have GNU gettext "
-                               "tools 0.15 or newer installed." % self.program)
+                               "tools 0.15 or newer installed.", logger_args=(self.program,))
 
         basedirs = [os.path.join('conf', 'locale'), 'locale']
         if os.environ.get('DJANGO_SETTINGS_MODULE'):
@@ -127,29 +127,31 @@ class Command(BaseCommand):
                 try:
                     if mo_path.stat().st_mtime >= po_path.stat().st_mtime:
                         if self.verbosity > 0:
-                            self.stdout.write(
-                                'File “%s” is already compiled and up to date.'
-                                % po_path
+                            self.logger.info(
+                                'File “%s” is already compiled and up to date.',
+                                str(po_path)
                             )
                         continue
                 except FileNotFoundError:
                     pass
                 if self.verbosity > 0:
-                    self.stdout.write('processing file %s in %s' % (f, dirpath))
+                    self.logger.info('processing file %s in %s', f, dirpath)
 
                 if has_bom(po_path):
-                    self.stderr.write(
+                    self.logger.error(
                         'The %s file has a BOM (Byte Order Mark). Django only '
-                        'supports .po files encoded in UTF-8 and without any BOM.' % po_path
+                        'supports .po files encoded in UTF-8 and without any BOM.',
+                        str(po_path),
                     )
                     self.has_errors = True
                     continue
 
                 # Check writability on first location
                 if i == 0 and not is_writable(mo_path):
-                    self.stderr.write(
+                    self.logger.error(
                         'The po files under %s are in a seemingly not writable location. '
-                        'mo files will not be updated/created.' % dirpath
+                        'mo files will not be updated/created.',
+                        dirpath
                     )
                     self.has_errors = True
                     return
@@ -164,7 +166,7 @@ class Command(BaseCommand):
                 if status:
                     if self.verbosity > 0:
                         if errors:
-                            self.stderr.write("Execution of %s failed: %s" % (self.program, errors))
+                            self.logger.error("Execution of %s failed: %s", self.program, errors)
                         else:
-                            self.stderr.write("Execution of %s failed" % self.program)
+                            self.logger.error("Execution of %s failed", self.program)
                     self.has_errors = True

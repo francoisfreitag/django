@@ -2,7 +2,6 @@ import gettext as gettext_module
 import os
 import stat
 import unittest
-from io import StringIO
 from pathlib import Path
 from subprocess import run
 from unittest import mock
@@ -35,36 +34,61 @@ class PoFileTests(MessageCompilationTests):
     LOCALE = 'es_AR'
     MO_FILE = 'locale/%s/LC_MESSAGES/django.mo' % LOCALE
     MO_FILE_EN = 'locale/en/LC_MESSAGES/django.mo'
+    PO_FILE = 'locale/%s/LC_MESSAGES/django.po' % LOCALE
 
     def test_bom_rejection(self):
-        stderr = StringIO()
-        with self.assertRaisesMessage(CommandError, 'compilemessages generated one or more errors.'):
-            call_command('compilemessages', locale=[self.LOCALE], verbosity=0, stderr=stderr)
-        self.assertIn('file has a BOM (Byte Order Mark)', stderr.getvalue())
+        msg = 'compilemessages generated one or more errors.'
+        with self.assertRaisesMessage(CommandError, msg), self.assertLogs('django.command') as logs:
+            call_command('compilemessages', locale=[self.LOCALE], verbosity=0)
+        filepath = os.path.join(self.test_dir, self.PO_FILE)
+        self.assertLogRecords(
+            logs,
+            [
+                ('ERROR',
+                 'The %s file has a BOM (Byte Order Mark). '
+                 'Django only supports .po files encoded in UTF-8 and without any BOM.',
+                 (filepath,)),
+            ]
+        )
         self.assertFalse(os.path.exists(self.MO_FILE))
 
     def test_no_write_access(self):
         mo_file_en = Path(self.MO_FILE_EN)
-        err_buffer = StringIO()
         # Put file in read-only mode.
         old_mode = mo_file_en.stat().st_mode
         mo_file_en.chmod(stat.S_IREAD)
         # Ensure .po file is more recent than .mo file.
         mo_file_en.with_suffix('.po').touch()
+        err_msg = 'compilemessages generated one or more errors.'
         try:
-            with self.assertRaisesMessage(CommandError, 'compilemessages generated one or more errors.'):
-                call_command('compilemessages', locale=['en'], stderr=err_buffer, verbosity=0)
-            self.assertIn('not writable location', err_buffer.getvalue())
+            with self.assertRaisesMessage(CommandError, err_msg), self.assertLogs('django.command', 'ERROR') as logs:
+                call_command('compilemessages', locale=['en'], verbosity=0)
         finally:
             mo_file_en.chmod(old_mode)
+        filepath = os.path.join(self.test_dir, "locale/en/LC_MESSAGES")
+        self.assertLogRecords(
+            logs,
+            [
+                ('ERROR',
+                 'The po files under %s are in a seemingly not writable location. '
+                 'mo files will not be updated/created.',
+                 (filepath,)),
+            ]
+        )
 
     def test_no_compile_when_unneeded(self):
         mo_file_en = Path(self.MO_FILE_EN)
         mo_file_en.touch()
-        stdout = StringIO()
-        call_command('compilemessages', locale=['en'], stdout=stdout, verbosity=1)
-        msg = '%s” is already compiled and up to date.' % mo_file_en.with_suffix('.po')
-        self.assertIn(msg, stdout.getvalue())
+        with self.assertLogs('django.command') as logs:
+            call_command('compilemessages', locale=['en'], verbosity=1)
+        self.assertLogRecords(
+            logs,
+            [(
+                'INFO',
+                'File “%s” is already compiled and up to date.',
+                (str(mo_file_en.with_suffix('.po').resolve()),)
+            )],
+        )
 
 
 class PoFileContentsTests(MessageCompilationTests):
@@ -198,10 +222,24 @@ class CompilationErrorHandling(MessageCompilationTests):
             cmd = MakeMessagesCommand()
             if cmd.gettext_version < (0, 18, 3):
                 self.skipTest("python-brace-format is a recent gettext addition.")
-            stderr = StringIO()
-            with self.assertRaisesMessage(CommandError, 'compilemessages generated one or more errors'):
-                call_command('compilemessages', locale=['ko'], stdout=StringIO(), stderr=stderr)
-            self.assertIn("' cannot start a field name", stderr.getvalue())
+            with self.assertLogs('django.command') as logs:
+                with self.assertRaisesMessage(CommandError, 'compilemessages generated one or more errors'):
+                    call_command('compilemessages', locale=['ko'])
+            file_dir = '%s/locale/ko/LC_MESSAGES' % self.test_dir
+            self.assertLogRecords(
+                logs,
+                [
+                    ('INFO', 'processing file %s in %s', ('django.po', file_dir)),
+                    ('ERROR',
+                     'Execution of %s failed: %s',
+                     (
+                         'msgfmt',
+                         file_dir + "/django.po:24: 'msgstr' is not a valid Python brace format string, "
+                         "unlike 'msgid'. Reason: In the directive number 0, '�' cannot start a field name.\n"
+                         "msgfmt: found 1 fatal error\n"
+                     )),
+                ]
+            )
 
 
 class ProjectAndAppTests(MessageCompilationTests):

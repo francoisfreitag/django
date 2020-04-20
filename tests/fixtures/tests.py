@@ -13,7 +13,6 @@ from django.core import management
 from django.core.files.temp import NamedTemporaryFile
 from django.core.management import CommandError
 from django.core.management.commands.dumpdata import ProxyModelWarning
-from django.core.serializers.base import ProgressBar
 from django.db import IntegrityError, connection
 from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
 
@@ -577,7 +576,6 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         """
         management.call_command('loaddata', 'fixture1.json', verbosity=0)
         new_io = StringIO()
-        new_io.isatty = lambda: True
         with NamedTemporaryFile() as file:
             options = {
                 'format': 'json',
@@ -585,16 +583,28 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
                 'stderr': new_io,
                 'output': file.name,
             }
-            management.call_command('dumpdata', 'fixtures', **options)
-            self.assertTrue(new_io.getvalue().endswith('[' + '.' * ProgressBar.progress_width + ']\n'))
+            with self.assertLogs('django.progress') as logs:
+                management.call_command('dumpdata', 'fixtures', **options)
+            self.assertLogRecords(
+                logs,
+                [
+                    ('INFO',
+                     '\r[........................                                                   ]',
+                     ()),
+                    ('INFO',
+                     '\r[.................................................                          ]',
+                     ()),
+                    ('INFO',
+                     '\r[...........................................................................]',
+                     ()),
+                    ('INFO', '\n', ()),
+                ]
+            )
 
             # Test no progress bar when verbosity = 0
             options['verbosity'] = 0
-            new_io = StringIO()
-            new_io.isatty = lambda: True
-            options.update({'stdout': new_io, 'stderr': new_io})
-            management.call_command('dumpdata', 'fixtures', **options)
-            self.assertEqual(new_io.getvalue(), '')
+            with self.assertNoLogs('django.progress'):
+                management.call_command('dumpdata', 'fixtures', **options)
 
     def test_dumpdata_proxy_without_concrete(self):
         """

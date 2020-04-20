@@ -5,7 +5,6 @@ from unittest import mock, skipIf
 
 from django.core import serializers
 from django.core.serializers import SerializerDoesNotExist
-from django.core.serializers.base import ProgressBar
 from django.db import connection, transaction
 from django.http import HttpResponse
 from django.test import SimpleTestCase, override_settings, skipUnlessDBFeature
@@ -228,13 +227,27 @@ class SerializersTestBase:
         self.assertEqual(objs[0].object.name, unicode_name)
 
     def test_serialize_progressbar(self):
-        fake_stdout = StringIO()
-        serializers.serialize(
-            self.serializer_name, Article.objects.all(),
-            progress_output=fake_stdout, object_count=Article.objects.count()
-        )
-        self.assertTrue(
-            fake_stdout.getvalue().endswith('[' + '.' * ProgressBar.progress_width + ']\n')
+        with self.assertLogs('django.progress') as logs:
+            serializers.serialize(
+                self.serializer_name, Article.objects.all(),
+                progress=True, object_count=Article.objects.count()
+            )
+        self.assertLogRecords(
+            logs,
+            [
+                (
+                    'INFO',
+                    '\r[.....................................                                      ]',
+                    (),
+                ),
+                (
+                    'INFO',
+                    '\r[...........................................................................]',
+                    (),
+                ),
+                ('INFO', '\n', ()),
+            ]
+
         )
 
     def test_serialize_superfluous_queries(self):

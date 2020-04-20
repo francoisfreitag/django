@@ -47,12 +47,22 @@ DEFAULT_LOGGING = {
             'level': 'ERROR',
             'filters': ['require_debug_false'],
             'class': 'django.utils.log.AdminEmailHandler'
-        }
+        },
+        'progress': {
+            'level': 'INFO',
+            'class': 'django.utils.log.NoNewLineStreamHandler',
+            'stream': 'ext://sys.stdout',
+        },
     },
     'loggers': {
         'django': {
             'handlers': ['console', 'mail_admins'],
             'level': 'INFO',
+        },
+        'django.progress': {
+            'handlers': ['progress'],
+            'level': 'INFO',
+            'propagate': False,
         },
         'django.server': {
             'handlers': ['django.server'],
@@ -196,6 +206,10 @@ class ServerFormatter(logging.Formatter):
 
     def uses_server_time(self):
         return self._fmt.find('{server_time}') >= 0
+
+
+class NoNewLineStreamHandler(logging.StreamHandler):
+    terminator = ''
 
 
 def log_response(message, *args, response=None, request=None, logger=request_logger, level=None, exc_info=None):

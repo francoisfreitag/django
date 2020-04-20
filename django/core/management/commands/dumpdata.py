@@ -192,11 +192,9 @@ class Command(BaseCommand):
 
         try:
             self.stdout.ending = None
-            progress_output = None
             object_count = 0
             # If dumpdata is outputting to stdout, there is no way to display progress
-            if output and self.stdout.isatty() and options['verbosity'] > 0:
-                progress_output = self.stdout
+            if output and options['verbosity'] > 0:
                 object_count = sum(get_objects(count_only=True))
             if output:
                 file_root, file_ext = os.path.splitext(output)
@@ -233,7 +231,7 @@ class Command(BaseCommand):
                     format, get_objects(), indent=indent,
                     use_natural_foreign_keys=use_natural_foreign_keys,
                     use_natural_primary_keys=use_natural_primary_keys,
-                    stream=stream or self.stdout, progress_output=progress_output,
+                    stream=stream or self.stdout, progress=True,
                     object_count=object_count,
                 )
             finally:

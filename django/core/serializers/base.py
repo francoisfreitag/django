@@ -1,6 +1,7 @@
 """
 Module for abstract serializer/unserializer base classes.
 """
+import logging
 from io import StringIO
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -41,13 +42,13 @@ class M2MDeserializationError(Exception):
 class ProgressBar:
     progress_width = 75
 
-    def __init__(self, output, total_count):
-        self.output = output
+    def __init__(self, total_count):
+        self.logger = logging.getLogger('django.progress')
         self.total_count = total_count
         self.prev_done = 0
 
     def update(self, count):
-        if not self.output:
+        if not self.total_count:
             return
         perc = count * 100 // self.total_count
         done = perc * self.progress_width // 100
@@ -55,10 +56,9 @@ class ProgressBar:
             return
         self.prev_done = done
         cr = '' if self.total_count == 1 else '\r'
-        self.output.write(cr + '[' + '.' * done + ' ' * (self.progress_width - done) + ']')
+        self.logger.info(cr + '[' + '.' * done + ' ' * (self.progress_width - done) + ']')
         if done == self.progress_width:
-            self.output.write('\n')
-        self.output.flush()
+            self.logger.info('\n')
 
 
 class Serializer:
@@ -73,7 +73,7 @@ class Serializer:
     stream_class = StringIO
 
     def serialize(self, queryset, *, stream=None, fields=None, use_natural_foreign_keys=False,
-                  use_natural_primary_keys=False, progress_output=None, object_count=0, **options):
+                  use_natural_primary_keys=False, progress=False, object_count=0, **options):
         """
         Serialize a queryset.
         """
@@ -83,7 +83,8 @@ class Serializer:
         self.selected_fields = fields
         self.use_natural_foreign_keys = use_natural_foreign_keys
         self.use_natural_primary_keys = use_natural_primary_keys
-        progress_bar = self.progress_class(progress_output, object_count)
+        if progress:
+            progress_bar = self.progress_class(object_count)
 
         self.start_serialization()
         self.first = True
@@ -113,7 +114,8 @@ class Serializer:
                     if self.selected_fields is None or field.attname in self.selected_fields:
                         self.handle_m2m_field(obj, field)
             self.end_object(obj)
-            progress_bar.update(count)
+            if progress:
+                progress_bar.update(count)
             self.first = self.first and False
         self.end_serialization()
         return self.getvalue()

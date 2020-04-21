@@ -79,4 +79,4 @@ Are you sure you want to do this?
                 # respond as if the database had been migrated from scratch.
                 emit_post_migrate_signal(verbosity, interactive, database)
         else:
-            self.stdout.write('Flush cancelled.')
+            self.logger.info('Flush cancelled.')

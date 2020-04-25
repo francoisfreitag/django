@@ -631,9 +631,9 @@ class MigrateTests(MigrationTestBase):
         """
         sqlmigrate outputs forward looking SQL.
         """
-        out = io.StringIO()
-        call_command("sqlmigrate", "migrations", "0001", stdout=out)
-        output = out.getvalue().lower()
+        with self.assertLogs('django.command') as logs:
+            call_command("sqlmigrate", "migrations", "0001")
+        output = combine_logs(logs).lower()
 
         index_tx_start = output.find(connection.ops.start_transaction_sql().lower())
         index_op_desc_author = output.find('-- create model author')
@@ -674,9 +674,9 @@ class MigrateTests(MigrationTestBase):
         # Cannot generate the reverse SQL unless we've applied the migration.
         call_command("migrate", "migrations", verbosity=0)
 
-        out = io.StringIO()
-        call_command("sqlmigrate", "migrations", "0001", stdout=out, backwards=True)
-        output = out.getvalue().lower()
+        with self.assertLogs('django.command') as logs:
+            call_command("sqlmigrate", "migrations", "0001", backwards=True)
+        output = combine_logs(logs).lower()
 
         index_tx_start = output.find(connection.ops.start_transaction_sql().lower())
         index_op_desc_unique_together = output.find('-- alter unique_together')
@@ -717,9 +717,9 @@ class MigrateTests(MigrationTestBase):
         """
         Transaction wrappers aren't shown for non-atomic migrations.
         """
-        out = io.StringIO()
-        call_command("sqlmigrate", "migrations", "0001", stdout=out)
-        output = out.getvalue().lower()
+        with self.assertLogs('django.command') as logs:
+            call_command("sqlmigrate", "migrations", "0001")
+        output = combine_logs(logs).lower()
         queries = [q.strip() for q in output.splitlines()]
         if connection.ops.start_transaction_sql():
             self.assertNotIn(connection.ops.start_transaction_sql().lower(), queries)
@@ -731,10 +731,10 @@ class MigrateTests(MigrationTestBase):
         Transaction wrappers aren't shown for databases that don't support
         transactional DDL.
         """
-        out = io.StringIO()
         with mock.patch.object(connection.features, 'can_rollback_ddl', False):
-            call_command('sqlmigrate', 'migrations', '0001', stdout=out)
-        output = out.getvalue().lower()
+            with self.assertLogs('django.command') as logs:
+                call_command('sqlmigrate', 'migrations', '0001')
+        output = combine_logs(logs).lower()
         queries = [q.strip() for q in output.splitlines()]
         start_transaction_sql = connection.ops.start_transaction_sql()
         if start_transaction_sql:
@@ -743,35 +743,37 @@ class MigrateTests(MigrationTestBase):
 
     @override_settings(MIGRATION_MODULES={'migrations': 'migrations.test_migrations_squashed'})
     def test_sqlmigrate_ambiguous_prefix_squashed_migrations(self):
-        msg = (
-            "More than one migration matches '0001' in app 'migrations'. "
-            "Please be more specific."
-        )
-        with self.assertRaisesMessage(CommandError, msg):
+        with self.assertRaises(CommandError) as cm:
             call_command('sqlmigrate', 'migrations', '0001')
+        [message] = cm.exception.args
+        self.assertEqual(
+            message,
+            "More than one migration matches '%s' in app '%s'. Please be more specific."
+        )
+        self.assertEqual(cm.exception.logger_args, ('0001', 'migrations'))
 
     @override_settings(MIGRATION_MODULES={'migrations': 'migrations.test_migrations_squashed'})
     def test_sqlmigrate_squashed_migration(self):
-        out = io.StringIO()
-        call_command('sqlmigrate', 'migrations', '0001_squashed_0002', stdout=out)
-        output = out.getvalue().lower()
+        with self.assertLogs('django.command') as logs:
+            call_command('sqlmigrate', 'migrations', '0001_squashed_0002')
+            output = combine_logs(logs).lower()
         self.assertIn('-- create model author', output)
         self.assertIn('-- create model book', output)
         self.assertNotIn('-- create model tribble', output)
 
     @override_settings(MIGRATION_MODULES={'migrations': 'migrations.test_migrations_squashed'})
     def test_sqlmigrate_replaced_migration(self):
-        out = io.StringIO()
-        call_command('sqlmigrate', 'migrations', '0001_initial', stdout=out)
-        output = out.getvalue().lower()
+        with self.assertLogs('django.command') as logs:
+            call_command('sqlmigrate', 'migrations', '0001_initial')
+        output = combine_logs(logs).lower()
         self.assertIn('-- create model author', output)
         self.assertIn('-- create model tribble', output)
 
     @override_settings(MIGRATION_MODULES={'migrations': 'migrations.test_migrations_no_operations'})
     def test_migrations_no_operations(self):
-        err = io.StringIO()
-        call_command('sqlmigrate', 'migrations', '0001_initial', stderr=err)
-        self.assertEqual(err.getvalue(), 'No operations found.\n')
+        with self.assertLogs('django.command', 'ERROR') as logs:
+            call_command('sqlmigrate', 'migrations', '0001_initial')
+        self.assertLogRecords(logs, [('ERROR', 'No operations found.', ())])
 
     @override_settings(
         INSTALLED_APPS=[

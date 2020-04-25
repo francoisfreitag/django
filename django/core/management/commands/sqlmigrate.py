@@ -44,15 +44,15 @@ class Command(BaseCommand):
         except LookupError as err:
             raise CommandError(str(err))
         if app_label not in loader.migrated_apps:
-            raise CommandError("App '%s' does not have migrations" % app_label)
+            raise CommandError("App '%s' does not have migrations", logger_args=(app_label,))
         try:
             migration = loader.get_migration_by_prefix(app_label, migration_name)
         except AmbiguityError:
-            raise CommandError("More than one migration matches '%s' in app '%s'. Please be more specific." % (
-                migration_name, app_label))
+            raise CommandError("More than one migration matches '%s' in app '%s'. Please be more specific.",
+                               logger_args=(migration_name, app_label))
         except KeyError:
-            raise CommandError("Cannot find a migration matching '%s' from app '%s'. Is it in INSTALLED_APPS?" % (
-                migration_name, app_label))
+            raise CommandError("Cannot find a migration matching '%s' from app '%s'. Is it in INSTALLED_APPS?",
+                               logger_args=(migration_name, app_label))
         target = (app_label, migration.name)
 
         # Show begin/end around output for atomic migrations, if the database
@@ -64,5 +64,5 @@ class Command(BaseCommand):
         plan = [(loader.graph.nodes[target], options['backwards'])]
         sql_statements = loader.collect_sql(plan)
         if not sql_statements and options['verbosity'] >= 1:
-            self.stderr.write('No operations found.')
-        return '\n'.join(sql_statements)
+            self.logger.error('No operations found.')
+        return '\n'.join(['%s'] * len(sql_statements)), *sql_statements

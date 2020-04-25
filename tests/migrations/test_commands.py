@@ -22,6 +22,10 @@ from .routers import TestRouter
 from .test_base import MigrationTestBase
 
 
+def combine_logs(logs):
+    return "\n".join(logs.output)
+
+
 class MigrateTests(MigrationTestBase):
     """
     Tests running the migrate command.
@@ -993,9 +997,9 @@ class MakeMigrationsTests(MigrationTestBase):
         empty_connections = ConnectionHandler({'default': {}})
         with mock.patch('django.core.management.commands.makemigrations.connections', new=empty_connections):
             # with no apps
-            out = io.StringIO()
-            call_command('makemigrations', stdout=out)
-            self.assertIn('No changes detected', out.getvalue())
+            with self.assertLogs('django.command') as logs:
+                call_command('makemigrations')
+            self.assertLogRecords(logs, [('INFO', 'No changes detected', ())])
             # with an app
             with self.temporary_migration_module() as migration_dir:
                 call_command('makemigrations', 'migrations', verbosity=0)
@@ -1074,22 +1078,27 @@ class MakeMigrationsTests(MigrationTestBase):
         with self.temporary_migration_module(module="migrations.test_migrations_conflict"):
             with self.assertRaises(CommandError) as context:
                 call_command("makemigrations")
+        [message] = context.exception.args
         self.assertEqual(
-            str(context.exception),
-            "Conflicting migrations detected; multiple leaf nodes in the "
-            "migration graph: (0002_conflicting_second, 0002_second in "
-            "migrations).\n"
+            message,
+            'Conflicting migrations detected; multiple leaf nodes in the '
+            'migration graph: (%s, %s in %s).\n'
             "To fix them run 'python manage.py makemigrations --merge'"
+        )
+        self.assertEqual(
+            context.exception.logger_args,
+            ('0002_conflicting_second', '0002_second', 'migrations')
         )
 
     def test_makemigrations_merge_no_conflict(self):
         """
         makemigrations exits if in merge mode with no conflicts.
         """
-        out = io.StringIO()
-        with self.temporary_migration_module(module="migrations.test_migrations"):
-            call_command("makemigrations", merge=True, stdout=out)
-        self.assertIn("No conflicts detected to merge.", out.getvalue())
+        with self.temporary_migration_module(
+            module="migrations.test_migrations",
+        ), self.assertLogs('django.command') as logs:
+            call_command("makemigrations", merge=True)
+        self.assertLogRecords(logs, [('INFO', 'No conflicts detected to merge.', ())])
 
     def test_makemigrations_empty_no_app_specified(self):
         """
@@ -1135,44 +1144,46 @@ class MakeMigrationsTests(MigrationTestBase):
         """
         makemigrations exits when there are no changes and no apps are specified.
         """
-        out = io.StringIO()
-        call_command("makemigrations", stdout=out)
-        self.assertIn("No changes detected", out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            call_command("makemigrations")
+        self.assertLogRecords(logs, [('INFO', 'No changes detected', ())])
 
     def test_makemigrations_no_changes(self):
         """
         makemigrations exits when there are no changes to an app.
         """
-        out = io.StringIO()
-        with self.temporary_migration_module(module="migrations.test_migrations_no_changes"):
-            call_command("makemigrations", "migrations", stdout=out)
-        self.assertIn("No changes detected in app 'migrations'", out.getvalue())
+        with self.temporary_migration_module(
+                module="migrations.test_migrations_no_changes",
+        ), self.assertLogs('django.command') as logs:
+            call_command("makemigrations", "migrations")
+        self.assertLogRecords(logs, [('INFO', "No changes detected in app '%s'", ('migrations',))])
 
     def test_makemigrations_no_apps_initial(self):
         """
         makemigrations should detect initial is needed on empty migration
         modules if no app provided.
         """
-        out = io.StringIO()
-        with self.temporary_migration_module(module="migrations.test_migrations_empty"):
-            call_command("makemigrations", stdout=out)
-        self.assertIn("0001_initial.py", out.getvalue())
+        with self.temporary_migration_module(
+                module="migrations.test_migrations_empty",
+        ), self.assertLogs('django.command') as logs:
+            call_command("makemigrations")
+        self.assertIn("0001_initial.py", combine_logs(logs))
 
     def test_makemigrations_no_init(self):
         """Migration directories without an __init__.py file are allowed."""
-        out = io.StringIO()
-        with self.temporary_migration_module(module='migrations.test_migrations_no_init'):
-            call_command('makemigrations', stdout=out)
-        self.assertIn('0001_initial.py', out.getvalue())
+        with self.temporary_migration_module(
+                module='migrations.test_migrations_no_init',
+        ), self.assertLogs('django.command') as logs:
+            call_command('makemigrations')
+        self.assertIn('0001_initial.py', combine_logs(logs))
 
     def test_makemigrations_migrations_announce(self):
         """
         makemigrations announces the migration at the default verbosity level.
         """
-        out = io.StringIO()
-        with self.temporary_migration_module():
-            call_command("makemigrations", "migrations", stdout=out)
-        self.assertIn("Migrations for 'migrations'", out.getvalue())
+        with self.temporary_migration_module(), self.assertLogs('django.command') as logs:
+            call_command("makemigrations", "migrations")
+        self.assertIn("Migrations for 'migrations'", combine_logs(logs))
 
     def test_makemigrations_no_common_ancestor(self):
         """
@@ -1203,38 +1214,49 @@ class MakeMigrationsTests(MigrationTestBase):
         """
         # Monkeypatch interactive questioner to auto accept
         with mock.patch('builtins.input', mock.Mock(return_value='y')):
-            out = io.StringIO()
             with self.temporary_migration_module(module="migrations.test_migrations_conflict") as migration_dir:
-                call_command("makemigrations", "migrations", name="merge", merge=True, interactive=True, stdout=out)
+                with self.assertLogs('django.command') as logs:
+                    call_command("makemigrations", "migrations", name="merge", merge=True, interactive=True)
                 merge_file = os.path.join(migration_dir, '0003_merge.py')
                 self.assertTrue(os.path.exists(merge_file))
-            self.assertIn("Created new merge migration", out.getvalue())
+            self.assertIn("Created new merge migration", combine_logs(logs))
 
     def test_makemigrations_default_merge_name(self):
-        out = io.StringIO()
         with self.temporary_migration_module(
             module='migrations.test_migrations_conflict'
-        ) as migration_dir:
-            call_command('makemigrations', 'migrations', merge=True, interactive=False, stdout=out)
+        ) as migration_dir, self.assertLogs('django.command') as logs:
+            call_command('makemigrations', 'migrations', merge=True, interactive=False, no_color=True)
             merge_file = os.path.join(
                 migration_dir,
                 '0003_merge_0002_conflicting_second_0002_second.py',
             )
             self.assertIs(os.path.exists(merge_file), True)
-        self.assertIn('Created new merge migration %s' % merge_file, out.getvalue())
+        self.assertLogRecords(
+            logs,
+            [
+                ('INFO', 'Merging %s', ('migrations',)),
+                ('INFO', '  Branch %s', ('0002_conflicting_second',)),
+                ('INFO', '    - %s', ('Create model Something',)),
+                ('INFO', '  Branch %s', ('0002_second',)),
+                ('INFO', '    - %s', ('Delete model Tribble',)),
+                ('INFO', '    - %s', ('Remove field silly_field from Author',)),
+                ('INFO', '    - %s', ('Add field rating to Author',)),
+                ('INFO', '    - %s', ('Create model Book',)),
+                ('INFO', '\nCreated new merge migration %s', (merge_file,)),
+            ]
+        )
 
     @mock.patch('django.db.migrations.utils.datetime')
     def test_makemigrations_auto_merge_name(self, mock_datetime):
         mock_datetime.datetime.now.return_value = datetime.datetime(2016, 1, 2, 3, 4)
         with mock.patch('builtins.input', mock.Mock(return_value='y')):
-            out = io.StringIO()
             with self.temporary_migration_module(
                 module='migrations.test_migrations_conflict_long_name'
-            ) as migration_dir:
-                call_command("makemigrations", "migrations", merge=True, interactive=True, stdout=out)
+            ) as migration_dir, self.assertLogs('django.command') as logs:
+                call_command("makemigrations", "migrations", merge=True, interactive=True)
                 merge_file = os.path.join(migration_dir, '0003_merge_20160102_0304.py')
                 self.assertTrue(os.path.exists(merge_file))
-            self.assertIn("Created new merge migration", out.getvalue())
+            self.assertIn("Created new merge migration", combine_logs(logs))
 
     def test_makemigrations_non_interactive_not_null_addition(self):
         """
@@ -1265,10 +1287,11 @@ class MakeMigrationsTests(MigrationTestBase):
             class Meta:
                 app_label = "migrations"
 
-        out = io.StringIO()
-        with self.temporary_migration_module(module="migrations.test_migrations"):
-            call_command("makemigrations", "migrations", interactive=False, stdout=out)
-        self.assertIn("Alter field slug on author", out.getvalue())
+        with self.temporary_migration_module(
+                module="migrations.test_migrations",
+        ), self.assertLogs('django.command') as logs:
+            call_command("makemigrations", "migrations", interactive=False)
+        self.assertIn("Alter field slug on author", combine_logs(logs))
 
     def test_makemigrations_non_interactive_no_model_rename(self):
         """
@@ -1281,11 +1304,13 @@ class MakeMigrationsTests(MigrationTestBase):
             class Meta:
                 app_label = "migrations"
 
-        out = io.StringIO()
-        with self.temporary_migration_module(module="migrations.test_migrations_no_default"):
-            call_command("makemigrations", "migrations", interactive=False, stdout=out)
-        self.assertIn("Delete model SillyModel", out.getvalue())
-        self.assertIn("Create model RenamedModel", out.getvalue())
+        with self.temporary_migration_module(
+                module="migrations.test_migrations_no_default",
+        ), self.assertLogs('django.command') as logs:
+            call_command("makemigrations", "migrations", interactive=False)
+        output = combine_logs(logs)
+        self.assertIn("Delete model SillyModel", output)
+        self.assertIn("Create model RenamedModel", output)
 
     def test_makemigrations_non_interactive_no_field_rename(self):
         """
@@ -1298,22 +1323,24 @@ class MakeMigrationsTests(MigrationTestBase):
             class Meta:
                 app_label = "migrations"
 
-        out = io.StringIO()
-        with self.temporary_migration_module(module="migrations.test_migrations_no_default"):
-            call_command("makemigrations", "migrations", interactive=False, stdout=out)
-        self.assertIn("Remove field silly_field from sillymodel", out.getvalue())
-        self.assertIn("Add field silly_rename to sillymodel", out.getvalue())
+        with self.temporary_migration_module(
+                module="migrations.test_migrations_no_default",
+        ), self.assertLogs('django.command') as logs:
+            call_command("makemigrations", "migrations", interactive=False)
+        output = combine_logs(logs)
+        self.assertIn("Remove field silly_field from sillymodel", output)
+        self.assertIn("Add field silly_rename to sillymodel", output)
 
     def test_makemigrations_handle_merge(self):
         """
         makemigrations properly merges the conflicting migrations with --noinput.
         """
-        out = io.StringIO()
         with self.temporary_migration_module(module="migrations.test_migrations_conflict") as migration_dir:
-            call_command("makemigrations", "migrations", name="merge", merge=True, interactive=False, stdout=out)
+            with self.assertLogs('django.command') as logs:
+                call_command("makemigrations", "migrations", name="merge", merge=True, interactive=False)
             merge_file = os.path.join(migration_dir, '0003_merge.py')
             self.assertTrue(os.path.exists(merge_file))
-        output = out.getvalue()
+        output = combine_logs(logs)
         self.assertIn("Merging migrations", output)
         self.assertIn("Branch 0002_second", output)
         self.assertIn("Branch 0002_conflicting_second", output)
@@ -1324,15 +1351,15 @@ class MakeMigrationsTests(MigrationTestBase):
         makemigrations respects --dry-run option when fixing migration
         conflicts (#24427).
         """
-        out = io.StringIO()
         with self.temporary_migration_module(module="migrations.test_migrations_conflict") as migration_dir:
-            call_command(
-                "makemigrations", "migrations", name="merge", dry_run=True,
-                merge=True, interactive=False, stdout=out,
-            )
+            with self.assertLogs('django.command') as logs:
+                call_command(
+                    "makemigrations", "migrations", name="merge", dry_run=True,
+                    merge=True, interactive=False
+                )
             merge_file = os.path.join(migration_dir, '0003_merge.py')
             self.assertFalse(os.path.exists(merge_file))
-        output = out.getvalue()
+        output = combine_logs(logs)
         self.assertIn("Merging migrations", output)
         self.assertIn("Branch 0002_second", output)
         self.assertIn("Branch 0002_conflicting_second", output)
@@ -1343,15 +1370,15 @@ class MakeMigrationsTests(MigrationTestBase):
         `makemigrations --merge --dry-run` writes the merge migration file to
         stdout with `verbosity == 3` (#24427).
         """
-        out = io.StringIO()
         with self.temporary_migration_module(module="migrations.test_migrations_conflict") as migration_dir:
-            call_command(
-                "makemigrations", "migrations", name="merge", dry_run=True,
-                merge=True, interactive=False, stdout=out, verbosity=3,
-            )
+            with self.assertLogs('django.command') as logs:
+                call_command(
+                    "makemigrations", "migrations", name="merge", dry_run=True,
+                    merge=True, interactive=False, verbosity=3,
+                )
             merge_file = os.path.join(migration_dir, '0003_merge.py')
             self.assertFalse(os.path.exists(merge_file))
-        output = out.getvalue()
+        output = combine_logs(logs)
         self.assertIn("Merging migrations", output)
         self.assertIn("Branch 0002_second", output)
         self.assertIn("Branch 0002_conflicting_second", output)
@@ -1377,11 +1404,12 @@ class MakeMigrationsTests(MigrationTestBase):
             class Meta:
                 app_label = "migrations"
 
-        out = io.StringIO()
-        with self.temporary_migration_module(module="migrations.test_migrations_no_default"):
-            call_command("makemigrations", "migrations", dry_run=True, stdout=out)
+        with self.temporary_migration_module(
+                module="migrations.test_migrations_no_default",
+        ), self.assertLogs('django.command') as logs:
+            call_command("makemigrations", "migrations", dry_run=True)
         # Output the expected changes directly, without asking for defaults
-        self.assertIn("Add field silly_date to sillymodel", out.getvalue())
+        self.assertIn("Add field silly_date to sillymodel", combine_logs(logs))
 
     def test_makemigrations_dry_run_verbosity_3(self):
         """
@@ -1395,21 +1423,23 @@ class MakeMigrationsTests(MigrationTestBase):
             class Meta:
                 app_label = "migrations"
 
-        out = io.StringIO()
-        with self.temporary_migration_module(module="migrations.test_migrations_no_default"):
-            call_command("makemigrations", "migrations", dry_run=True, stdout=out, verbosity=3)
+        with self.temporary_migration_module(
+                module="migrations.test_migrations_no_default",
+        ), self.assertLogs('django.command') as logs:
+            call_command("makemigrations", "migrations", dry_run=True, verbosity=3)
 
+        output = combine_logs(logs)
         # Normal --dry-run output
-        self.assertIn("- Add field silly_char to sillymodel", out.getvalue())
+        self.assertIn("- Add field silly_char to sillymodel", output)
 
         # Additional output caused by verbosity 3
         # The complete migrations file that would be written
-        self.assertIn("class Migration(migrations.Migration):", out.getvalue())
-        self.assertIn("dependencies = [", out.getvalue())
-        self.assertIn("('migrations', '0001_initial'),", out.getvalue())
-        self.assertIn("migrations.AddField(", out.getvalue())
-        self.assertIn("model_name='sillymodel',", out.getvalue())
-        self.assertIn("name='silly_char',", out.getvalue())
+        self.assertIn("class Migration(migrations.Migration):", output)
+        self.assertIn("dependencies = [", output)
+        self.assertIn("('migrations', '0001_initial'),", output)
+        self.assertIn("migrations.AddField(", output)
+        self.assertIn("model_name='sillymodel',", output)
+        self.assertIn("name='silly_char',", output)
 
     def test_makemigrations_migrations_modules_path_not_exist(self):
         """
@@ -1423,17 +1453,17 @@ class MakeMigrationsTests(MigrationTestBase):
             class Meta:
                 app_label = "migrations"
 
-        out = io.StringIO()
         migration_module = "migrations.test_migrations_path_doesnt_exist.foo.bar"
         with self.temporary_migration_module(module=migration_module) as migration_dir:
-            call_command("makemigrations", "migrations", stdout=out)
+            with self.assertLogs('django.command') as logs:
+                call_command("makemigrations", "migrations")
 
             # Migrations file is actually created in the expected path.
             initial_file = os.path.join(migration_dir, "0001_initial.py")
             self.assertTrue(os.path.exists(initial_file))
 
         # Command output indicates the migration is created.
-        self.assertIn(" - Create model SillyModel", out.getvalue())
+        self.assertIn(" - Create model SillyModel", combine_logs(logs))
 
     @override_settings(MIGRATION_MODULES={'migrations': 'some.nonexistent.path'})
     def test_makemigrations_migrations_modules_nonexistent_toplevel_package(self):
@@ -1452,14 +1482,14 @@ class MakeMigrationsTests(MigrationTestBase):
         --noinput is specified.
         """
         # Monkeypatch interactive questioner to auto reject
-        out = io.StringIO()
         with mock.patch('builtins.input', mock.Mock(return_value='N')):
             with self.temporary_migration_module(module="migrations.test_migrations_conflict") as migration_dir:
-                call_command("makemigrations", "migrations", name="merge", merge=True, stdout=out)
+                with self.assertLogs('django.command') as logs:
+                    call_command("makemigrations", "migrations", name="merge", merge=True)
                 merge_file = os.path.join(migration_dir, '0003_merge.py')
                 # This will fail if interactive is False by default
                 self.assertFalse(os.path.exists(merge_file))
-            self.assertNotIn("Created new merge migration", out.getvalue())
+            self.assertNotIn("Created new merge migration", combine_logs(logs))
 
     @override_settings(
         INSTALLED_APPS=[
@@ -1484,12 +1514,12 @@ class MakeMigrationsTests(MigrationTestBase):
         """
         # Monkeypatch interactive questioner to auto accept
         with mock.patch('builtins.input', mock.Mock(return_value='y')):
-            out = io.StringIO()
             with self.temporary_migration_module(app_label="migrated_app") as migration_dir:
-                call_command("makemigrations", "migrated_app", name="merge", merge=True, interactive=True, stdout=out)
+                with self.assertLogs('django.command') as logs:
+                    call_command("makemigrations", "migrated_app", name="merge", merge=True, interactive=True)
                 merge_file = os.path.join(migration_dir, '0003_merge.py')
                 self.assertFalse(os.path.exists(merge_file))
-            self.assertIn("No conflicts detected to merge.", out.getvalue())
+            self.assertIn("No conflicts detected to merge.", combine_logs(logs))
 
     @override_settings(
         INSTALLED_APPS=[
@@ -1502,22 +1532,25 @@ class MakeMigrationsTests(MigrationTestBase):
         """
         # Monkeypatch interactive questioner to auto accept
         with mock.patch('builtins.input', mock.Mock(return_value='N')):
-            out = io.StringIO()
-            with mock.patch('django.core.management.color.supports_color', lambda *args: False):
+            with mock.patch(
+                'django.core.management.color.supports_color', lambda *args: False
+            ), self.assertLogs('django.command') as logs:
                 call_command(
                     "makemigrations", "conflicting_app_with_dependencies",
-                    merge=True, interactive=True, stdout=out
+                    merge=True, interactive=True,
                 )
-            self.assertEqual(
-                out.getvalue().lower(),
-                'merging conflicting_app_with_dependencies\n'
-                '  branch 0002_conflicting_second\n'
-                '    - create model something\n'
-                '  branch 0002_second\n'
-                '    - delete model tribble\n'
-                '    - remove field silly_field from author\n'
-                '    - add field rating to author\n'
-                '    - create model book\n'
+            self.assertLogRecords(
+                logs,
+                [
+                    ('INFO', 'Merging %s', ('conflicting_app_with_dependencies',)),
+                    ('INFO', '  Branch %s', ('0002_conflicting_second',)),
+                    ('INFO', '    - %s', ('Create model Something',)),
+                    ('INFO', '  Branch %s', ('0002_second',)),
+                    ('INFO', '    - %s', ('Delete model Tribble',)),
+                    ('INFO', '    - %s', ('Remove field silly_field from Author',)),
+                    ('INFO', '    - %s', ('Add field rating to Author',)),
+                    ('INFO', '    - %s', ('Create model Book',)),
+                ],
             )
 
     def test_makemigrations_with_custom_name(self):
@@ -1575,11 +1608,11 @@ class MakeMigrationsTests(MigrationTestBase):
         they are outside of the current tree, in which case the absolute path
         should be shown.
         """
-        out = io.StringIO()
         apps.register_model('migrations', UnicodeModel)
         with self.temporary_migration_module() as migration_dir:
-            call_command("makemigrations", "migrations", stdout=out)
-            self.assertIn(os.path.join(migration_dir, '0001_initial.py'), out.getvalue())
+            with self.assertLogs('django.command') as logs:
+                call_command("makemigrations", "migrations")
+            self.assertIn(os.path.join(migration_dir, '0001_initial.py'), combine_logs(logs))
 
     def test_makemigrations_migration_path_output_valueerror(self):
         """
@@ -1588,11 +1621,11 @@ class MakeMigrationsTests(MigrationTestBase):
         Windows if Django is installed on a different drive than where the
         migration files are created.
         """
-        out = io.StringIO()
         with self.temporary_migration_module() as migration_dir:
             with mock.patch('os.path.relpath', side_effect=ValueError):
-                call_command('makemigrations', 'migrations', stdout=out)
-        self.assertIn(os.path.join(migration_dir, '0001_initial.py'), out.getvalue())
+                with self.assertLogs('django.command') as logs:
+                    call_command('makemigrations', 'migrations')
+        self.assertIn(os.path.join(migration_dir, '0001_initial.py'), combine_logs(logs))
 
     def test_makemigrations_inconsistent_history(self):
         """
@@ -1636,10 +1669,10 @@ class MakeMigrationsTests(MigrationTestBase):
 
         # Monkeypatch interactive questioner to auto accept
         with mock.patch('django.db.migrations.questioner.sys.stdout', new_callable=io.StringIO) as prompt_stdout:
-            out = io.StringIO()
             with self.temporary_migration_module(module='migrations.test_auto_now_add'):
-                call_command('makemigrations', 'migrations', interactive=True, stdout=out)
-            output = out.getvalue()
+                with self.assertLogs('django.command') as logs:
+                    call_command('makemigrations', 'migrations', interactive=True)
+            output = combine_logs(logs)
             prompt_output = prompt_stdout.getvalue()
             self.assertIn("You can accept the default 'timezone.now' by pressing 'Enter'", prompt_output)
             self.assertIn("Add field creation_date to entry", output)
@@ -1770,16 +1803,14 @@ class AppLabelErrorTests(TestCase):
     )
 
     def test_makemigrations_nonexistent_app_label(self):
-        err = io.StringIO()
-        with self.assertRaises(SystemExit):
-            call_command('makemigrations', 'nonexistent_app', stderr=err)
-        self.assertIn(self.nonexistent_app_error, err.getvalue())
+        with self.assertRaises(SystemExit), self.assertLogs('django.command', 'ERROR') as logs:
+            call_command('makemigrations', 'nonexistent_app')
+        self.assertLogRecords(logs, [('ERROR', self.nonexistent_app_error, ())])
 
     def test_makemigrations_app_name_specified_as_label(self):
-        err = io.StringIO()
-        with self.assertRaises(SystemExit):
-            call_command('makemigrations', 'django.contrib.auth', stderr=err)
-        self.assertIn(self.did_you_mean_auth_error, err.getvalue())
+        with self.assertRaises(SystemExit), self.assertLogs('django.command', 'ERROR') as logs:
+            call_command('makemigrations', 'django.contrib.auth')
+        self.assertLogRecords(logs, [('ERROR', self.did_you_mean_auth_error, ())])
 
     def test_migrate_nonexistent_app_label(self):
         with self.assertRaisesMessage(CommandError, self.nonexistent_app_error):

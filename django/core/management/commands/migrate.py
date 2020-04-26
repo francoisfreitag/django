@@ -1,3 +1,4 @@
+import logging
 import sys
 import time
 from importlib import import_module
@@ -16,6 +17,8 @@ from django.db.migrations.loader import AmbiguityError
 from django.db.migrations.state import ModelState, ProjectState
 from django.utils.module_loading import module_has_submodule
 from django.utils.text import Truncator
+
+progress_logger = logging.getLogger('django.progress')
 
 
 class Command(BaseCommand):
@@ -98,15 +101,7 @@ class Command(BaseCommand):
         # hard if there are any
         conflicts = executor.loader.detect_conflicts()
         if conflicts:
-            name_str = "; ".join(
-                "%s in %s" % (", ".join(names), app)
-                for app, names in conflicts.items()
-            )
-            raise CommandError(
-                "Conflicting migrations detected; multiple leaf nodes in the "
-                "migration graph: (%s).\nTo fix them run "
-                "'python manage.py makemigrations --merge'" % name_str
-            )
+            self.report_conflicts(conflicts)
 
         # If they supplied command line arguments, work out what they mean.
         run_syncdb = options['run_syncdb']
@@ -120,9 +115,12 @@ class Command(BaseCommand):
                 raise CommandError(str(err))
             if run_syncdb:
                 if app_label in executor.loader.migrated_apps:
-                    raise CommandError("Can't use run_syncdb with app '%s' as it has migrations." % app_label)
+                    raise CommandError(
+                        "Can't use run_syncdb with app '%s' as it has migrations.",
+                        logger_args=(app_label,)
+                    )
             elif app_label not in executor.loader.migrated_apps:
-                raise CommandError("App '%s' does not have migrations." % app_label)
+                raise CommandError("App '%s' does not have migrations.", logger_args=(app_label,))
 
         if options['app_label'] and options['migration_name']:
             migration_name = options['migration_name']
@@ -134,12 +132,14 @@ class Command(BaseCommand):
                 except AmbiguityError:
                     raise CommandError(
                         "More than one migration matches '%s' in app '%s'. "
-                        "Please be more specific." %
-                        (migration_name, app_label)
+                        'Please be more specific.',
+                        logger_args=(migration_name, app_label)
                     )
                 except KeyError:
-                    raise CommandError("Cannot find a migration matching '%s' from app '%s'." % (
-                        migration_name, app_label))
+                    raise CommandError(
+                        "Cannot find a migration matching '%s' from app '%s'.",
+                        logger_args=(migration_name, app_label)
+                    )
                 targets = [(app_label, migration.name)]
             target_app_labels_only = False
         elif options['app_label']:
@@ -151,15 +151,16 @@ class Command(BaseCommand):
         exit_dry = plan and options['check_unapplied']
 
         if options['plan']:
-            self.stdout.write('Planned operations:', self.style.MIGRATE_LABEL)
+            self.logger.info(self.style.MIGRATE_LABEL('Planned operations:'))
             if not plan:
-                self.stdout.write('  No planned migration operations.')
+                self.logger.info('  No planned migration operations.')
             for migration, backwards in plan:
-                self.stdout.write(str(migration), self.style.MIGRATE_HEADING)
+                self.logger.info(self.style.MIGRATE_HEADING(str(migration)))
                 for operation in migration.operations:
                     message, is_error = self.describe_operation(operation, backwards)
-                    style = self.style.WARNING if is_error else None
-                    self.stdout.write('    ' + message, style)
+                    if is_error:
+                        message = self.style.WARNING(message)
+                    self.logger.info('    %s', message)
             if exit_dry:
                 sys.exit(1)
             return
@@ -170,32 +171,35 @@ class Command(BaseCommand):
         run_syncdb = options['run_syncdb'] and executor.loader.unmigrated_apps
         # Print some useful info
         if self.verbosity >= 1:
-            self.stdout.write(self.style.MIGRATE_HEADING("Operations to perform:"))
+            self.logger.info(self.style.MIGRATE_HEADING('Operations to perform:'))
             if run_syncdb:
                 if options['app_label']:
-                    self.stdout.write(
-                        self.style.MIGRATE_LABEL("  Synchronize unmigrated app: %s" % app_label)
+                    self.logger.info(
+                        self.style.MIGRATE_LABEL('  Synchronize unmigrated app: %s'), app_label,
                     )
                 else:
-                    self.stdout.write(
-                        self.style.MIGRATE_LABEL("  Synchronize unmigrated apps: ") +
-                        (", ".join(sorted(executor.loader.unmigrated_apps)))
+                    unmigrated_apps = sorted(executor.loader.unmigrated_apps)
+                    placeholders = ', '.join(['%s'] * len(unmigrated_apps))
+                    self.logger.info(
+                        self.style.MIGRATE_LABEL('  Synchronize unmigrated apps: ') + placeholders,
+                        *unmigrated_apps,
                     )
             if target_app_labels_only:
-                self.stdout.write(
-                    self.style.MIGRATE_LABEL("  Apply all migrations: ") +
-                    (", ".join(sorted({a for a, n in targets})) or "(none)")
+                labels = sorted({a for a, n in targets}) or ["(none)"]
+                placeholders = ', '.join(['%s'] * len(labels))
+                self.logger.info(
+                    self.style.MIGRATE_LABEL('  Apply all migrations: ' + placeholders),
+                    *labels,
                 )
             else:
                 if targets[0][1] is None:
-                    self.stdout.write(
-                        self.style.MIGRATE_LABEL('  Unapply all migrations: ') +
-                        str(targets[0][0])
-                    )
+                    self.logger.info(
+                        self.style.MIGRATE_LABEL('  Unapply all migrations: ') + "%s",
+                        targets[0][0])
                 else:
-                    self.stdout.write(self.style.MIGRATE_LABEL(
-                        "  Target specific migration: ") + "%s, from %s"
-                        % (targets[0][1], targets[0][0])
+                    self.logger.info(self.style.MIGRATE_LABEL(
+                        '  Target specific migration: ') + "%s, from %s",
+                        targets[0][1], targets[0][0],
                     )
 
         pre_migrate_state = executor._create_project_state(with_applied_migrations=True)
@@ -207,7 +211,7 @@ class Command(BaseCommand):
         # Run the syncdb phase.
         if run_syncdb:
             if self.verbosity >= 1:
-                self.stdout.write(self.style.MIGRATE_HEADING("Synchronizing apps without migrations:"))
+                self.logger.info(self.style.MIGRATE_HEADING('Synchronizing apps without migrations:'))
             if options['app_label']:
                 self.sync_apps(connection, [app_label])
             else:
@@ -215,10 +219,10 @@ class Command(BaseCommand):
 
         # Migrate!
         if self.verbosity >= 1:
-            self.stdout.write(self.style.MIGRATE_HEADING("Running migrations:"))
+            self.logger.info(self.style.MIGRATE_HEADING('Running migrations:'))
         if not plan:
             if self.verbosity >= 1:
-                self.stdout.write("  No migrations to apply.")
+                self.logger.info('  No migrations to apply.')
                 # If there's changes that aren't in migrations yet, tell them how to fix it.
                 autodetector = MigrationAutodetector(
                     executor.loader.project_state(),
@@ -226,12 +230,14 @@ class Command(BaseCommand):
                 )
                 changes = autodetector.changes(graph=executor.loader.graph)
                 if changes:
-                    self.stdout.write(self.style.NOTICE(
-                        "  Your models in app(s): %s have changes that are not "
+                    placeholder = ", ".join(["%s"] * len(changes))
+                    self.logger.info(self.style.NOTICE(
+                        "  Your models in app(s): {} have changes that are not "
                         "yet reflected in a migration, and so won't be "
-                        "applied." % ", ".join(repr(app) for app in sorted(changes))
-                    ))
-                    self.stdout.write(self.style.NOTICE(
+                        "applied.".format(placeholder)),
+                        *(repr(app) for app in sorted(changes)),
+                    )
+                    self.logger.info(self.style.NOTICE(
                         "  Run 'manage.py makemigrations' to make new "
                         "migrations, and then re-run 'manage.py migrate' to "
                         "apply them."
@@ -275,33 +281,32 @@ class Command(BaseCommand):
             if action == "apply_start":
                 if compute_time:
                     self.start = time.monotonic()
-                self.stdout.write("  Applying %s..." % migration, ending="")
-                self.stdout.flush()
+                progress_logger.info('  Applying %s...', str(migration))
             elif action == "apply_success":
                 elapsed = " (%.3fs)" % (time.monotonic() - self.start) if compute_time else ""
                 if fake:
-                    self.stdout.write(self.style.SUCCESS(" FAKED" + elapsed))
+                    progress_logger.info(self.style.SUCCESS(' FAKED%s'), elapsed)
                 else:
-                    self.stdout.write(self.style.SUCCESS(" OK" + elapsed))
+                    progress_logger.info(self.style.SUCCESS(' OK%s'), elapsed)
+                progress_logger.info("\n")
             elif action == "unapply_start":
                 if compute_time:
                     self.start = time.monotonic()
-                self.stdout.write("  Unapplying %s..." % migration, ending="")
-                self.stdout.flush()
+                progress_logger.info('  Unapplying %s...', str(migration))
             elif action == "unapply_success":
                 elapsed = " (%.3fs)" % (time.monotonic() - self.start) if compute_time else ""
                 if fake:
-                    self.stdout.write(self.style.SUCCESS(" FAKED" + elapsed))
+                    progress_logger.info(self.style.SUCCESS(' FAKED%s'), elapsed)
                 else:
-                    self.stdout.write(self.style.SUCCESS(" OK" + elapsed))
+                    progress_logger.info(self.style.SUCCESS(' OK%s'), elapsed)
+                progress_logger.info("\n")
             elif action == "render_start":
                 if compute_time:
                     self.start = time.monotonic()
-                self.stdout.write("  Rendering model states...", ending="")
-                self.stdout.flush()
+                progress_logger.info('  Rendering model states...')
             elif action == "render_success":
                 elapsed = " (%.3fs)" % (time.monotonic() - self.start) if compute_time else ""
-                self.stdout.write(self.style.SUCCESS(" DONE" + elapsed))
+                progress_logger.info(self.style.SUCCESS(' DONE%s\n'), elapsed)
 
     def sync_apps(self, connection, app_labels):
         """Run the old syncdb-style operation on a list of app_labels."""
@@ -333,7 +338,7 @@ class Command(BaseCommand):
 
         # Create the tables for each model
         if self.verbosity >= 1:
-            self.stdout.write('  Creating tables...')
+            self.logger.info('  Creating tables...')
         with connection.schema_editor() as editor:
             for app_name, model_list in manifest.items():
                 for model in model_list:
@@ -341,16 +346,16 @@ class Command(BaseCommand):
                     if not model._meta.can_migrate(connection):
                         continue
                     if self.verbosity >= 3:
-                        self.stdout.write(
-                            '    Processing %s.%s model' % (app_name, model._meta.object_name)
+                        self.logger.info(
+                            '    Processing %s.%s model', app_name, model._meta.object_name,
                         )
                     if self.verbosity >= 1:
-                        self.stdout.write('    Creating table %s' % model._meta.db_table)
+                        self.logger.info('    Creating table %s', model._meta.db_table)
                     editor.create_model(model)
 
             # Deferred SQL is executed when exiting the editor's context.
             if self.verbosity >= 1:
-                self.stdout.write('    Running deferred SQL...')
+                self.logger.info('    Running deferred SQL...')
 
     @staticmethod
     def describe_operation(operation, backwards):
@@ -375,3 +380,20 @@ class Command(BaseCommand):
             action = ' -> ' + action
         truncated = Truncator(action)
         return prefix + operation.describe() + truncated.chars(40), is_error
+
+    @staticmethod
+    def report_conflicts(conflicts):
+        conflicts_placeholder = []
+        logger_args = []
+        for app, names in conflicts.items():
+            names_placeholder = ", ".join(["%s"] * len(names))
+            conflicts_placeholder.append("{0} in %s".format(names_placeholder))
+            logger_args.extend(names)
+            logger_args.append(app)
+        conflicts_placeholder = "; ".join(conflicts_placeholder)
+        raise CommandError(
+            'Conflicting migrations detected; multiple leaf nodes in the '
+            'migration graph: ({}).\nTo fix them run '
+            "'python manage.py makemigrations --merge'".format(conflicts_placeholder),
+            logger_args=tuple(logger_args)
+        )

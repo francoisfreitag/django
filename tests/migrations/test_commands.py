@@ -301,37 +301,37 @@ class MigrateTests(MigrationTestBase):
         showmigrations --list  displays migrations and whether or not they're
         applied.
         """
-        out = io.StringIO()
-        with mock.patch('django.core.management.color.supports_color', lambda *args: True):
-            call_command("showmigrations", format='list', stdout=out, verbosity=0, no_color=False)
-        self.assertEqual(
-            '\x1b[1mmigrations\n\x1b[0m'
-            ' [ ] 0001_initial\n'
-            ' [ ] 0002_second\n',
-            out.getvalue().lower()
-        )
+        with mock.patch(
+            'django.core.management.color.supports_color', lambda *args: True,
+        ), self.assertLogs('django.command') as logs:
+            call_command("showmigrations", format='list', verbosity=0, no_color=False)
+        self.assertLogRecords(logs, [
+            ('INFO', '\x1b[1m%s\x1b[0m', ('migrations',)),
+            ('INFO', ' [ ] %s', ('0001_initial',)),
+            ('INFO', ' [ ] %s', ('0002_second',)),
+        ])
 
         call_command("migrate", "migrations", "0001", verbosity=0)
 
-        out = io.StringIO()
         # Giving the explicit app_label tests for selective `show_list` in the command
-        call_command("showmigrations", "migrations", format='list', stdout=out, verbosity=0, no_color=True)
-        self.assertEqual(
-            'migrations\n'
-            ' [x] 0001_initial\n'
-            ' [ ] 0002_second\n',
-            out.getvalue().lower()
-        )
-        out = io.StringIO()
+        with self.assertLogs('django.command') as logs:
+            call_command("showmigrations", "migrations", format='list', verbosity=0, no_color=True)
+        self.assertLogRecords(logs, [
+            ('INFO', '%s', ('migrations',)),
+            ('INFO', ' [X] %s', ('0001_initial',)),
+            ('INFO', ' [ ] %s', ('0002_second',)),
+        ])
         # Applied datetimes are displayed at verbosity 2+.
-        call_command('showmigrations', 'migrations', stdout=out, verbosity=2, no_color=True)
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', 'migrations', verbosity=2, no_color=True)
         migration1 = MigrationRecorder(connection).migration_qs.get(app='migrations', name='0001_initial')
-        self.assertEqual(
-            'migrations\n'
-            ' [x] 0001_initial (applied at %s)\n'
-            ' [ ] 0002_second\n' % migration1.applied.strftime('%Y-%m-%d %H:%M:%S'),
-            out.getvalue().lower()
-        )
+        self.assertLogRecords(logs, [
+            ('INFO', '%s', ('migrations',)),
+            ('INFO',
+             ' [X] %s (applied at %s)',
+             ('0001_initial', migration1.applied.strftime('%Y-%m-%d %H:%M:%S'))),
+            ('INFO', ' [ ] %s', ('0002_second',)),
+        ])
         # Cleanup by unmigrating everything
         call_command("migrate", "migrations", "zero", verbosity=0)
 
@@ -340,42 +340,52 @@ class MigrateTests(MigrationTestBase):
         """
         Tests --plan output of showmigrations command
         """
-        out = io.StringIO()
-        call_command("showmigrations", format='plan', stdout=out)
-        self.assertEqual(
-            "[ ]  migrations.0001_initial\n"
-            "[ ]  migrations.0003_third\n"
-            "[ ]  migrations.0002_second\n",
-            out.getvalue().lower()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command("showmigrations", format='plan')
+        self.assertLogRecords(logs, [
+            ('INFO', '[ ]  %s.%s', ('migrations', '0001_initial')),
+            ('INFO', '[ ]  %s.%s', ('migrations', '0003_third')),
+            ('INFO', '[ ]  %s.%s', ('migrations', '0002_second')),
+        ])
 
-        out = io.StringIO()
-        call_command("showmigrations", format='plan', stdout=out, verbosity=2)
-        self.assertEqual(
-            "[ ]  migrations.0001_initial\n"
-            "[ ]  migrations.0003_third ... (migrations.0001_initial)\n"
-            "[ ]  migrations.0002_second ... (migrations.0001_initial, migrations.0003_third)\n",
-            out.getvalue().lower()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command("showmigrations", format='plan', verbosity=2)
+        self.assertLogRecords(logs, [
+            ('INFO', '[ ]  %s.%s', ('migrations', '0001_initial')),
+            ('INFO', '[ ]  %s.%s ... (%s.%s)', ('migrations', '0003_third', 'migrations', '0001_initial')),
+            ('INFO',
+             '[ ]  %s.%s ... (%s.%s, %s.%s)',
+             ('migrations',
+              '0002_second',
+              'migrations',
+              '0001_initial',
+              'migrations',
+              '0003_third')),
+        ])
         call_command("migrate", "migrations", "0003", verbosity=0)
 
-        out = io.StringIO()
-        call_command("showmigrations", format='plan', stdout=out)
-        self.assertEqual(
-            "[x]  migrations.0001_initial\n"
-            "[x]  migrations.0003_third\n"
-            "[ ]  migrations.0002_second\n",
-            out.getvalue().lower()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command("showmigrations", format='plan')
+        self.assertLogRecords(logs, [
+            ('INFO', '[X]  %s.%s', ('migrations', '0001_initial')),
+            ('INFO', '[X]  %s.%s', ('migrations', '0003_third')),
+            ('INFO', '[ ]  %s.%s', ('migrations', '0002_second')),
+        ])
 
-        out = io.StringIO()
-        call_command("showmigrations", format='plan', stdout=out, verbosity=2)
-        self.assertEqual(
-            "[x]  migrations.0001_initial\n"
-            "[x]  migrations.0003_third ... (migrations.0001_initial)\n"
-            "[ ]  migrations.0002_second ... (migrations.0001_initial, migrations.0003_third)\n",
-            out.getvalue().lower()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command("showmigrations", format='plan', verbosity=2)
+        self.assertLogRecords(logs, [
+            ('INFO', '[X]  %s.%s', ('migrations', '0001_initial')),
+            ('INFO', '[X]  %s.%s ... (%s.%s)', ('migrations', '0003_third', 'migrations', '0001_initial')),
+            ('INFO',
+             '[ ]  %s.%s ... (%s.%s, %s.%s)',
+             ('migrations',
+              '0002_second',
+              'migrations',
+              '0001_initial',
+              'migrations',
+              '0003_third')),
+        ])
 
         # Cleanup by unmigrating everything
         call_command("migrate", "migrations", "zero", verbosity=0)
@@ -473,79 +483,81 @@ class MigrateTests(MigrationTestBase):
 
     @override_settings(MIGRATION_MODULES={'migrations': 'migrations.test_migrations_empty'})
     def test_showmigrations_no_migrations(self):
-        out = io.StringIO()
-        call_command('showmigrations', stdout=out, no_color=True)
-        self.assertEqual('migrations\n (no migrations)\n', out.getvalue().lower())
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', no_color=True)
+        self.assertLogRecords(logs, [
+            ('INFO', '%s', ('migrations',)),
+            ('INFO', ' (no migrations)', ()),
+        ])
 
     @override_settings(INSTALLED_APPS=['migrations.migrations_test_apps.unmigrated_app'])
     def test_showmigrations_unmigrated_app(self):
-        out = io.StringIO()
-        call_command('showmigrations', 'unmigrated_app', stdout=out, no_color=True)
-        self.assertEqual('unmigrated_app\n (no migrations)\n', out.getvalue().lower())
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', 'unmigrated_app', no_color=True)
+        self.assertLogRecords(logs, [
+            ('INFO', '%s', ('unmigrated_app',)),
+            ('INFO', ' (no migrations)', ()),
+        ])
 
     @override_settings(MIGRATION_MODULES={"migrations": "migrations.test_migrations_empty"})
     def test_showmigrations_plan_no_migrations(self):
         """
         Tests --plan output of showmigrations command without migrations
         """
-        out = io.StringIO()
-        call_command('showmigrations', format='plan', stdout=out, no_color=True)
-        self.assertEqual('(no migrations)\n', out.getvalue().lower())
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', format='plan', no_color=True)
+        self.assertLogRecords(logs, [('INFO', '(no migrations)', ())])
 
-        out = io.StringIO()
-        call_command('showmigrations', format='plan', stdout=out, verbosity=2, no_color=True)
-        self.assertEqual('(no migrations)\n', out.getvalue().lower())
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', format='plan', verbosity=2, no_color=True)
+        self.assertLogRecords(logs, [('INFO', '(no migrations)', ())])
 
     @override_settings(MIGRATION_MODULES={"migrations": "migrations.test_migrations_squashed_complex"})
     def test_showmigrations_plan_squashed(self):
         """
         Tests --plan output of showmigrations command with squashed migrations.
         """
-        out = io.StringIO()
-        call_command("showmigrations", format='plan', stdout=out)
-        self.assertEqual(
-            "[ ]  migrations.1_auto\n"
-            "[ ]  migrations.2_auto\n"
-            "[ ]  migrations.3_squashed_5\n"
-            "[ ]  migrations.6_auto\n"
-            "[ ]  migrations.7_auto\n",
-            out.getvalue().lower()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command("showmigrations", format='plan')
+        self.assertLogRecords(logs, [
+            ('INFO', '[ ]  %s.%s', ('migrations', '1_auto')),
+            ('INFO', '[ ]  %s.%s', ('migrations', '2_auto')),
+            ('INFO', '[ ]  %s.%s', ('migrations', '3_squashed_5')),
+            ('INFO', '[ ]  %s.%s', ('migrations', '6_auto')),
+            ('INFO', '[ ]  %s.%s', ('migrations', '7_auto')),
+        ])
 
-        out = io.StringIO()
-        call_command("showmigrations", format='plan', stdout=out, verbosity=2)
-        self.assertEqual(
-            "[ ]  migrations.1_auto\n"
-            "[ ]  migrations.2_auto ... (migrations.1_auto)\n"
-            "[ ]  migrations.3_squashed_5 ... (migrations.2_auto)\n"
-            "[ ]  migrations.6_auto ... (migrations.3_squashed_5)\n"
-            "[ ]  migrations.7_auto ... (migrations.6_auto)\n",
-            out.getvalue().lower()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command("showmigrations", format='plan', verbosity=2)
+        self.assertLogRecords(logs, [
+            ('INFO', '[ ]  %s.%s', ('migrations', '1_auto')),
+            ('INFO', '[ ]  %s.%s ... (%s.%s)', ('migrations', '2_auto', 'migrations', '1_auto')),
+            ('INFO', '[ ]  %s.%s ... (%s.%s)', ('migrations', '3_squashed_5', 'migrations', '2_auto')),
+            ('INFO', '[ ]  %s.%s ... (%s.%s)', ('migrations', '6_auto', 'migrations', '3_squashed_5')),
+            ('INFO', '[ ]  %s.%s ... (%s.%s)', ('migrations', '7_auto', 'migrations', '6_auto')),
+        ])
 
         call_command("migrate", "migrations", "3_squashed_5", verbosity=0)
 
-        out = io.StringIO()
-        call_command("showmigrations", format='plan', stdout=out)
-        self.assertEqual(
-            "[x]  migrations.1_auto\n"
-            "[x]  migrations.2_auto\n"
-            "[x]  migrations.3_squashed_5\n"
-            "[ ]  migrations.6_auto\n"
-            "[ ]  migrations.7_auto\n",
-            out.getvalue().lower()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command("showmigrations", format='plan')
+        self.assertLogRecords(logs, [
+            ('INFO', '[X]  %s.%s', ('migrations', '1_auto')),
+            ('INFO', '[X]  %s.%s', ('migrations', '2_auto')),
+            ('INFO', '[X]  %s.%s', ('migrations', '3_squashed_5')),
+            ('INFO', '[ ]  %s.%s', ('migrations', '6_auto')),
+            ('INFO', '[ ]  %s.%s', ('migrations', '7_auto')),
+        ])
 
-        out = io.StringIO()
-        call_command("showmigrations", format='plan', stdout=out, verbosity=2)
-        self.assertEqual(
-            "[x]  migrations.1_auto\n"
-            "[x]  migrations.2_auto ... (migrations.1_auto)\n"
-            "[x]  migrations.3_squashed_5 ... (migrations.2_auto)\n"
-            "[ ]  migrations.6_auto ... (migrations.3_squashed_5)\n"
-            "[ ]  migrations.7_auto ... (migrations.6_auto)\n",
-            out.getvalue().lower()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command("showmigrations", format='plan', verbosity=2)
+        self.assertLogRecords(logs, [
+            ('INFO', '[X]  %s.%s', ('migrations', '1_auto')),
+            ('INFO', '[X]  %s.%s ... (%s.%s)', ('migrations', '2_auto', 'migrations', '1_auto')),
+            ('INFO', '[X]  %s.%s ... (%s.%s)', ('migrations', '3_squashed_5', 'migrations', '2_auto')),
+            ('INFO', '[ ]  %s.%s ... (%s.%s)', ('migrations', '6_auto', 'migrations', '3_squashed_5')),
+            ('INFO', '[ ]  %s.%s ... (%s.%s)', ('migrations', '7_auto', 'migrations', '6_auto')),
+        ])
 
     @override_settings(INSTALLED_APPS=[
         'migrations.migrations_test_apps.mutate_state_b',
@@ -557,32 +569,29 @@ class MigrateTests(MigrationTestBase):
         `showmigrations --plan app_label` output with a single app_label.
         """
         # Single app with no dependencies on other apps.
-        out = io.StringIO()
-        call_command('showmigrations', 'mutate_state_b', format='plan', stdout=out)
-        self.assertEqual(
-            '[ ]  mutate_state_b.0001_initial\n'
-            '[ ]  mutate_state_b.0002_add_field\n',
-            out.getvalue()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', 'mutate_state_b', format='plan')
+        self.assertLogRecords(logs, [
+            ('INFO', '[ ]  %s.%s', ('mutate_state_b', '0001_initial')),
+            ('INFO', '[ ]  %s.%s', ('mutate_state_b', '0002_add_field')),
+        ])
         # Single app with dependencies.
-        out = io.StringIO()
-        call_command('showmigrations', 'author_app', format='plan', stdout=out)
-        self.assertEqual(
-            '[ ]  author_app.0001_initial\n'
-            '[ ]  book_app.0001_initial\n'
-            '[ ]  author_app.0002_alter_id\n',
-            out.getvalue()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', 'author_app', format='plan')
+        self.assertLogRecords(logs, [
+            ('INFO', '[ ]  %s.%s', ('author_app', '0001_initial')),
+            ('INFO', '[ ]  %s.%s', ('book_app', '0001_initial')),
+            ('INFO', '[ ]  %s.%s', ('author_app', '0002_alter_id')),
+        ])
         # Some migrations already applied.
         call_command('migrate', 'author_app', '0001', verbosity=0)
-        out = io.StringIO()
-        call_command('showmigrations', 'author_app', format='plan', stdout=out)
-        self.assertEqual(
-            '[X]  author_app.0001_initial\n'
-            '[ ]  book_app.0001_initial\n'
-            '[ ]  author_app.0002_alter_id\n',
-            out.getvalue()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', 'author_app', format='plan')
+        self.assertLogRecords(logs, [
+            ('INFO', '[X]  %s.%s', ('author_app', '0001_initial')),
+            ('INFO', '[ ]  %s.%s', ('book_app', '0001_initial')),
+            ('INFO', '[ ]  %s.%s', ('author_app', '0002_alter_id')),
+        ])
         # Cleanup by unmigrating author_app.
         call_command('migrate', 'author_app', 'zero', verbosity=0)
 
@@ -597,34 +606,27 @@ class MigrateTests(MigrationTestBase):
         """
         # Multiple apps: author_app depends on book_app; mutate_state_b doesn't
         # depend on other apps.
-        out = io.StringIO()
-        call_command('showmigrations', 'mutate_state_b', 'author_app', format='plan', stdout=out)
-        self.assertEqual(
-            '[ ]  author_app.0001_initial\n'
-            '[ ]  book_app.0001_initial\n'
-            '[ ]  author_app.0002_alter_id\n'
-            '[ ]  mutate_state_b.0001_initial\n'
-            '[ ]  mutate_state_b.0002_add_field\n',
-            out.getvalue()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', 'mutate_state_b', 'author_app', format='plan')
+        expected = [
+            ('INFO', '[ ]  %s.%s', ('author_app', '0001_initial')),
+            ('INFO', '[ ]  %s.%s', ('book_app', '0001_initial')),
+            ('INFO', '[ ]  %s.%s', ('author_app', '0002_alter_id')),
+            ('INFO', '[ ]  %s.%s', ('mutate_state_b', '0001_initial')),
+            ('INFO', '[ ]  %s.%s', ('mutate_state_b', '0002_add_field')),
+        ]
+        self.assertLogRecords(logs, expected)
         # Multiple apps: args order shouldn't matter (the same result is
         # expected as above).
-        out = io.StringIO()
-        call_command('showmigrations', 'author_app', 'mutate_state_b', format='plan', stdout=out)
-        self.assertEqual(
-            '[ ]  author_app.0001_initial\n'
-            '[ ]  book_app.0001_initial\n'
-            '[ ]  author_app.0002_alter_id\n'
-            '[ ]  mutate_state_b.0001_initial\n'
-            '[ ]  mutate_state_b.0002_add_field\n',
-            out.getvalue()
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', 'author_app', 'mutate_state_b', format='plan')
+        self.assertLogRecords(logs, expected)
 
     @override_settings(INSTALLED_APPS=['migrations.migrations_test_apps.unmigrated_app'])
     def test_showmigrations_plan_app_label_no_migrations(self):
-        out = io.StringIO()
-        call_command('showmigrations', 'unmigrated_app', format='plan', stdout=out, no_color=True)
-        self.assertEqual('(no migrations)\n', out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            call_command('showmigrations', 'unmigrated_app', format='plan', no_color=True)
+        self.assertLogRecords(logs, [('INFO', '(no migrations)', ())])
 
     @override_settings(MIGRATION_MODULES={"migrations": "migrations.test_migrations"})
     def test_sqlmigrate_forwards(self):
@@ -852,14 +854,13 @@ class MigrateTests(MigrationTestBase):
         replaced migrations as run.
         """
         recorder = MigrationRecorder(connection)
-        out = io.StringIO()
         call_command("migrate", "migrations", verbosity=0)
-        call_command("showmigrations", "migrations", stdout=out, no_color=True)
-        self.assertEqual(
-            'migrations\n'
-            ' [x] 0001_squashed_0002 (2 squashed migrations)\n',
-            out.getvalue().lower()
-        )
+        with self.assertLogs('django.command', 'INFO') as logs:
+            call_command("showmigrations", "migrations", no_color=True)
+        self.assertLogRecords(logs, [
+            ('INFO', '%s', ('migrations',)),
+            ('INFO', ' [X] %s', ('0001_squashed_0002 (2 squashed migrations)',)),
+        ])
         applied_migrations = recorder.applied_migrations()
         self.assertIn(("migrations", "0001_initial"), applied_migrations)
         self.assertIn(("migrations", "0002_second"), applied_migrations)
@@ -876,14 +877,13 @@ class MigrateTests(MigrationTestBase):
         recorder = MigrationRecorder(connection)
         recorder.record_applied("migrations", "0001_initial")
         recorder.record_applied("migrations", "0002_second")
-        out = io.StringIO()
         call_command("migrate", "migrations", verbosity=0)
-        call_command("showmigrations", "migrations", stdout=out, no_color=True)
-        self.assertEqual(
-            'migrations\n'
-            ' [x] 0001_squashed_0002 (2 squashed migrations)\n',
-            out.getvalue().lower()
-        )
+        with self.assertLogs('django.command', 'INFO') as logs:
+            call_command("showmigrations", "migrations", no_color=True)
+        self.assertLogRecords(logs, [
+            ('INFO', '%s', ('migrations',)),
+            ('INFO', ' [X] %s', ('0001_squashed_0002 (2 squashed migrations)',)),
+        ])
         self.assertIn(
             ("migrations", "0001_squashed_0002"),
             recorder.applied_migrations()
@@ -1823,16 +1823,14 @@ class AppLabelErrorTests(TestCase):
             call_command('migrate', 'django.contrib.auth')
 
     def test_showmigrations_nonexistent_app_label(self):
-        err = io.StringIO()
-        with self.assertRaises(SystemExit):
-            call_command('showmigrations', 'nonexistent_app', stderr=err)
-        self.assertIn(self.nonexistent_app_error, err.getvalue())
+        with self.assertRaises(SystemExit), self.assertLogs('django.command', 'ERROR') as logs:
+            call_command('showmigrations', 'nonexistent_app')
+        self.assertLogRecords(logs, [('ERROR', self.nonexistent_app_error, ())])
 
     def test_showmigrations_app_name_specified_as_label(self):
-        err = io.StringIO()
-        with self.assertRaises(SystemExit):
-            call_command('showmigrations', 'django.contrib.auth', stderr=err)
-        self.assertIn(self.did_you_mean_auth_error, err.getvalue())
+        with self.assertRaises(SystemExit), self.assertLogs('django.command', 'ERROR') as logs:
+            call_command('showmigrations', 'django.contrib.auth')
+        self.assertLogRecords(logs, [('ERROR', self.did_you_mean_auth_error, ())])
 
     def test_sqlmigrate_nonexistent_app_label(self):
         with self.assertRaisesMessage(CommandError, self.nonexistent_app_error):

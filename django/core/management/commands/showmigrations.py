@@ -1,3 +1,4 @@
+import itertools
 import sys
 
 from django.apps import apps
@@ -57,7 +58,7 @@ class Command(BaseCommand):
             try:
                 apps.get_app_config(app_name)
             except LookupError as err:
-                self.stderr.write(str(err))
+                self.logger.error(str(err))
                 has_bad_names = True
         if has_bad_names:
             sys.exit(2)
@@ -79,7 +80,7 @@ class Command(BaseCommand):
         # For each app, print its migrations in order from oldest (roots) to
         # newest (leaves).
         for app_name in app_names:
-            self.stdout.write(app_name, self.style.MIGRATE_LABEL)
+            self.logger.info(self.style.MIGRATE_LABEL("%s"), app_name)
             shown = set()
             for node in graph.leaf_nodes(app_name):
                 for plan_node in graph.forwards_plan(node):
@@ -91,16 +92,18 @@ class Command(BaseCommand):
                         applied_migration = loader.applied_migrations.get(plan_node)
                         # Mark it as applied/unapplied
                         if applied_migration:
-                            output = ' [X] %s' % title
+                            args = [title]
+                            output = ' [X] %s'
                             if self.verbosity >= 2:
-                                output += ' (applied at %s)' % applied_migration.applied.strftime('%Y-%m-%d %H:%M:%S')
-                            self.stdout.write(output)
+                                args.append(applied_migration.applied.strftime('%Y-%m-%d %H:%M:%S'))
+                                output += ' (applied at %s)'
+                            self.logger.info(output, *args)
                         else:
-                            self.stdout.write(" [ ] %s" % title)
+                            self.logger.info(" [ ] %s", title)
                         shown.add(plan_node)
             # If we didn't print anything, then a small message
             if not shown:
-                self.stdout.write(" (no migrations)", self.style.ERROR)
+                self.logger.info(self.style.ERROR(" (no migrations)"))
 
     def show_plan(self, connection, app_names=None):
         """
@@ -127,21 +130,26 @@ class Command(BaseCommand):
                     seen.add(migration)
 
         # Output
-        def print_deps(node):
-            out = []
-            for parent in sorted(node.parents):
-                out.append("%s.%s" % parent.key)
-            if out:
-                return " ... (%s)" % ", ".join(out)
-            return ""
+        def format_deps(node):
+            # parent.key is a tuple (app_label, migration_name).
+            parent_keys = [parent.key for parent in sorted(node.parents)]
+            if parent_keys:
+                args = itertools.chain.from_iterable(parent_keys)
+                placeholders = ", ".join(["%s.%s"] * len(parent_keys))
+                return " ... (" + placeholders + ")", args
+            return "", []
 
         for node in plan:
-            deps = ""
+            deps_placeholder, deps_args = "", []
             if self.verbosity >= 2:
-                deps = print_deps(node)
+                deps_placeholder, deps_args = format_deps(node)
             if node.key in loader.applied_migrations:
-                self.stdout.write("[X]  %s.%s%s" % (node.key[0], node.key[1], deps))
+                self.logger.info(
+                    "[X]  %s.%s{0}".format(deps_placeholder),
+                    node.key[0], node.key[1], *deps_args)
             else:
-                self.stdout.write("[ ]  %s.%s%s" % (node.key[0], node.key[1], deps))
+                self.logger.info(
+                    "[ ]  %s.%s{0}".format(deps_placeholder),
+                    node.key[0], node.key[1], *deps_args)
         if not plan:
-            self.stdout.write('(no migrations)', self.style.ERROR)
+            self.logger.info(self.style.ERROR('(no migrations)'))

@@ -1,5 +1,3 @@
-import io
-
 from django.core.management import call_command
 from django.test import TestCase
 
@@ -15,8 +13,8 @@ class CoreCommandsNoOutputTests(TestCase):
         self.assertEqual(log.msg, 'No tables found.')
 
     def test_sqlsequencereset_no_sequences(self):
-        out = io.StringIO()
-        err = io.StringIO()
-        call_command('sqlsequencereset', 'empty_models', stdout=out, stderr=err)
-        self.assertEqual(out.getvalue(), '')
-        self.assertEqual(err.getvalue(), 'No sequences found.\n')
+        with self.assertLogs('django.command', 'ERROR') as logs:
+            call_command('sqlsequencereset', 'empty_models')
+        [log] = logs.records
+        self.assertEqual(log.levelname, 'ERROR')
+        self.assertEqual(log.msg, 'No sequences found.')

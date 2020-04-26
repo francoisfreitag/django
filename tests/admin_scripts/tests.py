@@ -1222,13 +1222,16 @@ class ManageCheck(AdminScriptTestCase):
         self.assertNoOutput(out)
 
 
+def combine_logs(logs):
+    return "\n".join(logs.output)
+
+
 class ManageRunserver(SimpleTestCase):
     def setUp(self):
         def monkey_run(*args, **options):
             return
 
-        self.output = StringIO()
-        self.cmd = RunserverCommand(stdout=self.output)
+        self.cmd = RunserverCommand()
         self.cmd.run = monkey_run
 
     def assertServerSettings(self, addr, port, ipv6=False, raw_ipv6=False):
@@ -1304,21 +1307,23 @@ class ManageRunserver(SimpleTestCase):
         runserver.check_migrations() doesn't choke when a database is read-only.
         """
         with mock.patch.object(MigrationRecorder, 'has_table', return_value=False):
-            self.cmd.check_migrations()
+            with self.assertLogs('django.command') as logs:
+                self.cmd.check_migrations()
+        output = combine_logs(logs)
         # You have # ...
-        self.assertIn('unapplied migration(s)', self.output.getvalue())
+        self.assertIn('unapplied migration(s)', output)
 
 
 class ManageRunserverMigrationWarning(TestCase):
 
     def setUp(self):
-        self.stdout = StringIO()
-        self.runserver_command = RunserverCommand(stdout=self.stdout)
+        self.runserver_command = RunserverCommand()
 
     @override_settings(INSTALLED_APPS=["admin_scripts.app_waiting_migration"])
     def test_migration_warning_one_app(self):
-        self.runserver_command.check_migrations()
-        output = self.stdout.getvalue()
+        with self.assertLogs('django.command') as logs:
+            self.runserver_command.check_migrations()
+        output = combine_logs(logs)
         self.assertIn('You have 1 unapplied migration(s)', output)
         self.assertIn('apply the migrations for app(s): app_waiting_migration.', output)
 
@@ -1329,8 +1334,9 @@ class ManageRunserverMigrationWarning(TestCase):
         ],
     )
     def test_migration_warning_multiple_apps(self):
-        self.runserver_command.check_migrations()
-        output = self.stdout.getvalue()
+        with self.assertLogs('django.command') as logs:
+            self.runserver_command.check_migrations()
+        output = combine_logs(logs)
         self.assertIn('You have 2 unapplied migration(s)', output)
         self.assertIn(
             'apply the migrations for app(s): another_app_waiting_migration, '

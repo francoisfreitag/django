@@ -62,7 +62,7 @@ class Command(BaseCommand):
         if app_label not in loader.migrated_apps:
             raise CommandError(
                 "App '%s' does not have migrations (so squashmigrations on "
-                "it makes no sense)" % app_label
+                "it makes no sense)", logger_args=(app_label,)
             )
 
         migration = self.find_migration(loader, app_label, migration_name)
@@ -86,14 +86,14 @@ class Command(BaseCommand):
                     "the migration '%s'?\n"
                     "Have a look at:\n"
                     "  python manage.py showmigrations %s\n"
-                    "to debug this issue." % (start_migration, migration, app_label)
+                    "to debug this issue.", logger_args=(str(start_migration), str(migration), app_label)
                 )
 
         # Tell them what we're doing and optionally ask if we should proceed
         if self.verbosity > 0 or self.interactive:
-            self.stdout.write(self.style.MIGRATE_HEADING("Will squash the following migrations:"))
+            self.logger.info(self.style.MIGRATE_HEADING('Will squash the following migrations:'))
             for migration in migrations_to_squash:
-                self.stdout.write(" - %s" % migration.name)
+                self.logger.info(' - %s', migration.name)
 
             if self.interactive:
                 answer = None
@@ -120,7 +120,8 @@ class Command(BaseCommand):
                 raise CommandError(
                     "You cannot squash squashed migrations! Please transition "
                     "it to a normal migration first: "
-                    "https://docs.djangoproject.com/en/%s/topics/migrations/#squashing-migrations" % get_docs_version()
+                    "https://docs.djangoproject.com/en/%s/topics/migrations/#squashing-migrations",
+                    logger_args=(get_docs_version(),)
                 )
             operations.extend(smigration.operations)
             for dependency in smigration.dependencies:
@@ -135,22 +136,22 @@ class Command(BaseCommand):
 
         if no_optimize:
             if self.verbosity > 0:
-                self.stdout.write(self.style.MIGRATE_HEADING("(Skipping optimization.)"))
+                self.logger.info(self.style.MIGRATE_HEADING('(Skipping optimization.)'))
             new_operations = operations
         else:
             if self.verbosity > 0:
-                self.stdout.write(self.style.MIGRATE_HEADING("Optimizing..."))
+                self.logger.info(self.style.MIGRATE_HEADING('Optimizing...'))
 
             optimizer = MigrationOptimizer()
             new_operations = optimizer.optimize(operations, migration.app_label)
 
             if self.verbosity > 0:
                 if len(new_operations) == len(operations):
-                    self.stdout.write("  No optimizations possible.")
+                    self.logger.info('  No optimizations possible.')
                 else:
-                    self.stdout.write(
-                        "  Optimized from %s operations to %s operations." %
-                        (len(operations), len(new_operations))
+                    self.logger.info(
+                        '  Optimized from %s operations to %s operations.',
+                        len(operations), len(new_operations)
                     )
 
         # Work out the value of replaces (any squashed ones we're re-squashing)
@@ -188,15 +189,16 @@ class Command(BaseCommand):
             fh.write(writer.as_string())
 
         if self.verbosity > 0:
-            self.stdout.write(
-                self.style.MIGRATE_HEADING('Created new squashed migration %s' % writer.path) + '\n'
+            self.logger.info(
+                self.style.MIGRATE_HEADING('Created new squashed migration %s') + '\n'
                 '  You should commit this migration but leave the old ones in place;\n'
                 '  the new migration will be used for new installs. Once you are sure\n'
                 '  all instances of the codebase have applied the migrations you squashed,\n'
-                '  you can delete them.'
+                '  you can delete them.',
+                writer.path
             )
             if writer.needs_manual_porting:
-                self.stdout.write(
+                self.logger.info(
                     self.style.MIGRATE_HEADING('Manual porting required') + '\n'
                     '  Your migrations contained functions that must be manually copied over,\n'
                     '  as we could not safely copy their implementation.\n'
@@ -209,10 +211,10 @@ class Command(BaseCommand):
         except AmbiguityError:
             raise CommandError(
                 "More than one migration matches '%s' in app '%s'. Please be "
-                "more specific." % (name, app_label)
+                "more specific.", logger_args=(name, app_label)
             )
         except KeyError:
             raise CommandError(
-                "Cannot find a migration matching '%s' from app '%s'." %
-                (name, app_label)
+                "Cannot find a migration matching '%s' from app '%s'.",
+                logger_args=(name, app_label)
             )

@@ -1767,24 +1767,26 @@ class SquashMigrationsTests(MigrationTestBase):
         """
         squashmigrations squashes migrations.
         """
-        out = io.StringIO()
         with self.temporary_migration_module(module="migrations.test_migrations") as migration_dir:
-            call_command('squashmigrations', 'migrations', '0002', interactive=False, stdout=out, no_color=True)
+            with self.assertLogs('django.command') as logs:
+                call_command('squashmigrations', 'migrations', '0002', interactive=False, no_color=True)
 
             squashed_migration_file = os.path.join(migration_dir, "0001_squashed_0002_second.py")
             self.assertTrue(os.path.exists(squashed_migration_file))
-        self.assertEqual(
-            out.getvalue(),
-            'Will squash the following migrations:\n'
-            ' - 0001_initial\n'
-            ' - 0002_second\n'
-            'Optimizing...\n'
-            '  Optimized from 8 operations to 2 operations.\n'
-            'Created new squashed migration %s\n'
-            '  You should commit this migration but leave the old ones in place;\n'
-            '  the new migration will be used for new installs. Once you are sure\n'
-            '  all instances of the codebase have applied the migrations you squashed,\n'
-            '  you can delete them.\n' % squashed_migration_file
+        self.assertLogRecords(
+            logs,
+            [('INFO', 'Will squash the following migrations:', ()),
+             ('INFO', ' - %s', ('0001_initial',)),
+             ('INFO', ' - %s', ('0002_second',)),
+             ('INFO', 'Optimizing...', ()),
+             ('INFO', '  Optimized from %s operations to %s operations.', (8, 2)),
+             ('INFO',
+              'Created new squashed migration %s\n'
+              '  You should commit this migration but leave the old ones in place;\n'
+              '  the new migration will be used for new installs. Once you are sure\n'
+              '  all instances of the codebase have applied the migrations you squashed,\n'
+              '  you can delete them.',
+              (squashed_migration_file,))]
         )
 
     def test_squashmigrations_initial_attribute(self):
@@ -1800,36 +1802,36 @@ class SquashMigrationsTests(MigrationTestBase):
         """
         squashmigrations optimizes operations.
         """
-        out = io.StringIO()
         with self.temporary_migration_module(module="migrations.test_migrations"):
-            call_command("squashmigrations", "migrations", "0002", interactive=False, verbosity=1, stdout=out)
-        self.assertIn("Optimized from 8 operations to 2 operations.", out.getvalue())
+            with self.assertLogs('django.command') as logs:
+                call_command("squashmigrations", "migrations", "0002", interactive=False, verbosity=1)
+        self.assertIn("Optimized from 8 operations to 2 operations.", combine_logs(logs))
 
     def test_ticket_23799_squashmigrations_no_optimize(self):
         """
         squashmigrations --no-optimize doesn't optimize operations.
         """
-        out = io.StringIO()
         with self.temporary_migration_module(module="migrations.test_migrations"):
-            call_command("squashmigrations", "migrations", "0002",
-                         interactive=False, verbosity=1, no_optimize=True, stdout=out)
-        self.assertIn("Skipping optimization", out.getvalue())
+            with self.assertLogs('django.command') as logs:
+                call_command("squashmigrations", "migrations", "0002",
+                             interactive=False, verbosity=1, no_optimize=True)
+        self.assertIn("Skipping optimization", combine_logs(logs))
 
     def test_squashmigrations_valid_start(self):
         """
         squashmigrations accepts a starting migration.
         """
-        out = io.StringIO()
         with self.temporary_migration_module(module="migrations.test_migrations_no_changes") as migration_dir:
-            call_command("squashmigrations", "migrations", "0002", "0003",
-                         interactive=False, verbosity=1, stdout=out)
+            with self.assertLogs('django.command') as logs:
+                call_command("squashmigrations", "migrations", "0002", "0003",
+                             interactive=False, verbosity=1)
 
             squashed_migration_file = os.path.join(migration_dir, "0002_second_squashed_0003_third.py")
             with open(squashed_migration_file, encoding='utf-8') as fp:
                 content = fp.read()
                 self.assertIn("        ('migrations', '0001_initial')", content)
                 self.assertNotIn("initial = True", content)
-        out = out.getvalue()
+        out = combine_logs(logs)
         self.assertNotIn(" - 0001_initial", out)
         self.assertIn(" - 0002_second", out)
         self.assertIn(" - 0003_third", out)
@@ -1838,13 +1840,22 @@ class SquashMigrationsTests(MigrationTestBase):
         """
         squashmigrations doesn't accept a starting migration after the ending migration.
         """
-        with self.temporary_migration_module(module="migrations.test_migrations_no_changes"):
-            msg = (
-                "The migration 'migrations.0003_third' cannot be found. Maybe "
-                "it comes after the migration 'migrations.0002_second'"
-            )
-            with self.assertRaisesMessage(CommandError, msg):
-                call_command("squashmigrations", "migrations", "0003", "0002", interactive=False, verbosity=0)
+        with self.temporary_migration_module(
+            module="migrations.test_migrations_no_changes"
+        ), self.assertRaises(CommandError) as cm:
+            call_command("squashmigrations", "migrations", "0003", "0002", interactive=False, verbosity=0)
+        [message] = cm.exception.args
+        self.assertEqual(
+            message,
+            "The migration '%s' cannot be found. Maybe it comes after the migration '%s'?\n"
+            'Have a look at:\n'
+            '  python manage.py showmigrations %s\n'
+            'to debug this issue.'
+        )
+        self.assertEqual(
+            cm.exception.logger_args,
+            ('migrations.0003_third', 'migrations.0002_second', 'migrations')
+        )
 
     def test_squashed_name_with_start_migration_name(self):
         """--squashed-name specifies the new migration's name."""

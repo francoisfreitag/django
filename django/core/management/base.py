@@ -37,12 +37,14 @@ class CommandError(Exception):
 
     If this exception is raised during the execution of a management
     command, it will be caught and turned into a nicely-printed error
-    message to the appropriate output stream (i.e., stderr); as a
-    result, raising this exception (with a sensible description of the
-    error) is the preferred way to indicate that something has gone
-    wrong in the execution of a command.
+    message to the appropriate logger. As a result, raising this
+    exception (with a sensible description of the error) is the
+    preferred way to indicate that something has gone wrong in the
+    execution of a command.
     """
-    def __init__(self, *args, returncode=1, **kwargs):
+    def __init__(self, *args, logger_args=(), returncode=1, **kwargs):
+        self.message = args[0] if args else ''
+        self.logger_args = logger_args
         self.returncode = returncode
         super().__init__(*args, **kwargs)
 
@@ -76,7 +78,7 @@ class CommandParser(ArgumentParser):
         if self.called_from_command_line:
             super().error(message)
         else:
-            raise CommandError("Error: %s" % message)
+            raise CommandError("Error: %s", logger_args=(message,))
 
 
 def handle_default_options(options):
@@ -198,8 +200,8 @@ class BaseCommand:
        SQL statements, will be wrapped in ``BEGIN`` and ``COMMIT``.
 
     4. If ``handle()`` or ``execute()`` raised any exception (e.g.
-       ``CommandError``), ``run_from_argv()`` will  instead print an error
-       message to ``stderr``.
+       ``CommandError``), ``run_from_argv()`` will dispatch the error
+       to the corresponding logger.
 
     Thus, the ``handle()`` method is typically the starting point for
     subclasses; many built-in commands and command types either place
@@ -354,9 +356,10 @@ class BaseCommand:
         """
         Set up any environment changes requested (e.g., Python path
         and Django settings), then run this command. If the
-        command raises a ``CommandError``, intercept it and print it sensibly
-        to stderr. If the ``--traceback`` option is present or the raised
-        ``Exception`` is not ``CommandError``, raise it.
+        command raises a ``CommandError``, intercept it and log the
+        error to the command logger. If the ``--traceback`` option is
+        present or the raised ``Exception`` is not ``CommandError``,
+        raise it.
         """
         self._called_from_command_line = True
         parser = self.create_parser(argv[0], argv[1])
@@ -376,8 +379,7 @@ class BaseCommand:
             if isinstance(e, SystemCheckError):
                 self.logger.error(str(e))
             else:
-                self.logger.error('%s: %s' % (e.__class__.__name__,
-                                              e.args[0]))
+                self.logger.error(f'%s: {e.message}', e.__class__.__name__, *e.logger_args)
             sys.exit(e.returncode)
         finally:
             try:
@@ -546,7 +548,7 @@ class AppCommand(BaseCommand):
         try:
             app_configs = [apps.get_app_config(app_label) for app_label in app_labels]
         except (LookupError, ImportError) as e:
-            raise CommandError("%s. Are you sure your INSTALLED_APPS setting is correct?" % e)
+            raise CommandError('%s. Are you sure your INSTALLED_APPS setting is correct?', logger_args=e)
         output = []
         for app_config in app_configs:
             app_output = self.handle_app_config(app_config, **options)

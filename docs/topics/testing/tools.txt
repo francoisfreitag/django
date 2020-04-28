@@ -1935,18 +1935,23 @@ Management Commands
 ===================
 
 Management commands can be tested with the
-:func:`~django.core.management.call_command` function. The output can be
-redirected into a ``StringIO`` instance::
+:func:`~django.core.management.call_command` function. The
+:meth:`unittest.TestCase.assertLogs` allows verifying the output of the
+command.
 
-    from io import StringIO
-    from django.core.management import call_command
-    from django.test import TestCase
+.. deprecated:: 3.1
 
-    class ClosepollTest(TestCase):
-        def test_command_output(self):
-            out = StringIO()
-            call_command('closepoll', stdout=out)
-            self.assertIn('Expected output', out.getvalue())
+    The output can be redirected into a ``StringIO`` instance::
+
+        from io import StringIO
+        from django.core.management import call_command
+        from django.test import TestCase
+
+        class ClosepollTest(TestCase):
+            def test_command_output(self):
+                out = StringIO()
+                call_command('closepoll', stdout=out)
+                self.assertIn('Expected output', out.getvalue())
 
 .. _skipping-tests:
 

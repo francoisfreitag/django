@@ -2075,11 +2075,7 @@ Command options which take multiple options are passed a list::
 The return value of the ``call_command()`` function is the same as the return
 value of the ``handle()`` method of the command.
 
-Output redirection
-==================
+.. deprecated:: 3.1
 
-Note that you can redirect standard output and error streams as all commands
-support the ``stdout`` and ``stderr`` options. For example, you could write::
-
-    with open('/path/to/command_output', 'w') as f:
-        management.call_command('dumpdata', stdout=f)
+    Starting in Django 4.0, the ``stdout`` and ``stderr`` options are replaced
+    with :doc:`configuring the command logger </topics/logging>`.

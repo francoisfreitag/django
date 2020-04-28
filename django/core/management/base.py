@@ -21,6 +21,15 @@ from django.utils.deprecation import (
 ALL_CHECKS = '__all__'
 
 
+def warn_deprecated_stdout_stderr():
+    warnings.warn(
+        "The 'stdout' and 'stderr' attributes are deprecated.\n"
+        "Use the new 'logger' attribute instead.",
+        RemovedInDjango40Warning,
+        stacklevel=2,
+    )
+
+
 class CommandError(Exception):
     """
     Exception class indicating a problem while executing a management
@@ -151,12 +160,7 @@ class OutputWrapper(TextIOBase):
         return hasattr(self._out, 'isatty') and self._out.isatty()
 
     def write(self, msg='', style_func=None, ending=None):
-        warnings.warn(
-            "The 'stdout' and 'stderr' attributes are deprecated.\n"
-            "Use the new 'logger' attribute instead.",
-            RemovedInDjango40Warning,
-            stacklevel=2
-        )
+        warn_deprecated_stdout_stderr()
         ending = self.ending if ending is None else ending
         if ending and not msg.endswith(ending):
             msg += ending
@@ -251,6 +255,8 @@ class BaseCommand:
 
     def __init__(self, stdout=None, stderr=None, no_color=False, force_color=False):
         self.logger = logging.getLogger('django.command')
+        if stdout is not None or stderr is not None:
+            warn_deprecated_stdout_stderr()
         self.stdout = OutputWrapper(stdout or sys.stdout)
         self.stderr = OutputWrapper(stderr or sys.stderr)
         if no_color and force_color:

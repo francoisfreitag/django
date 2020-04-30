@@ -142,9 +142,11 @@ class CommandTests(SimpleTestCase):
             management.call_command('hal')
 
     def test_output_transaction(self):
-        output = management.call_command('transaction', stdout=StringIO(), no_color=True)
-        self.assertTrue(output.strip().startswith(connection.ops.start_transaction_sql()))
-        self.assertTrue(output.strip().endswith(connection.ops.end_transaction_sql()))
+        output = StringIO()
+        management.call_command('transaction', stdout=output, no_color=True)
+        output = output.getvalue().strip()
+        self.assertTrue(output.startswith(connection.ops.start_transaction_sql()))
+        self.assertTrue(output.endswith(connection.ops.end_transaction_sql()))
 
     def test_call_command_no_checks(self):
         """

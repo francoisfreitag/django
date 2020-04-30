@@ -736,6 +736,11 @@ Miscellaneous
 * The ``NullBooleanField`` model field is deprecated in favor of
   ``BooleanField(null=True)``.
 
+* The return value from :meth:`.BaseCommand.handle` is deprecated. It will no
+  longer be returned by :func:`~django.core.management.call_command`. The value
+  can be obtained in tests by :ref:`capturing the standard output
+  <topics-testing-management-commands>`.
+
 .. _removed-features-3.1:
 
 Features removed in 3.1

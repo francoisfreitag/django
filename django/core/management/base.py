@@ -378,7 +378,6 @@ class BaseCommand:
                     self.style.SQL_KEYWORD(connection.ops.end_transaction_sql()),
                 )
             self.stdout.write(output)
-        return output
 
     def check(self, app_configs=None, tags=None, display_num_errors=False,
               include_deployment_checks=False, fail_level=checks.ERROR,

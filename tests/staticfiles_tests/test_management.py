@@ -62,7 +62,9 @@ class TestFindStatic(TestDefaults, CollectionTestCase):
     Test ``findstatic`` management command.
     """
     def _get_file(self, filepath):
-        path = call_command('findstatic', filepath, all=False, verbosity=0, stdout=StringIO())
+        output = StringIO()
+        call_command('findstatic', filepath, all=False, verbosity=0, stdout=output)
+        path = output.getvalue().strip()
         with open(path, encoding='utf-8') as f:
             return f.read()
 
@@ -70,8 +72,9 @@ class TestFindStatic(TestDefaults, CollectionTestCase):
         """
         findstatic returns all candidate files if run without --first and -v1.
         """
-        result = call_command('findstatic', 'test/file.txt', verbosity=1, stdout=StringIO())
-        lines = [l.strip() for l in result.split('\n')]
+        output = StringIO()
+        call_command('findstatic', 'test/file.txt', verbosity=1, stdout=output)
+        lines = [l.strip() for l in output.getvalue().strip().split('\n')]
         self.assertEqual(len(lines), 3)  # three because there is also the "Found <file> here" line
         self.assertIn('project', lines[1])
         self.assertIn('apps', lines[2])
@@ -80,8 +83,9 @@ class TestFindStatic(TestDefaults, CollectionTestCase):
         """
         findstatic returns all candidate files if run without --first and -v0.
         """
-        result = call_command('findstatic', 'test/file.txt', verbosity=0, stdout=StringIO())
-        lines = [l.strip() for l in result.split('\n')]
+        output = StringIO()
+        call_command('findstatic', 'test/file.txt', verbosity=0, stdout=output)
+        lines = [l.strip() for l in output.getvalue().strip().split('\n')]
         self.assertEqual(len(lines), 2)
         self.assertIn('project', lines[0])
         self.assertIn('apps', lines[1])
@@ -91,8 +95,9 @@ class TestFindStatic(TestDefaults, CollectionTestCase):
         findstatic returns all candidate files if run without --first and -v2.
         Also, test that findstatic returns the searched locations with -v2.
         """
-        result = call_command('findstatic', 'test/file.txt', verbosity=2, stdout=StringIO())
-        lines = [l.strip() for l in result.split('\n')]
+        output = StringIO()
+        call_command('findstatic', 'test/file.txt', verbosity=2, stdout=output)
+        lines = [l.strip() for l in output.getvalue().split('\n')]
         self.assertIn('project', lines[1])
         self.assertIn('apps', lines[2])
         self.assertIn("Looking in the following locations:", lines[3])

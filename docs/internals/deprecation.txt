@@ -44,6 +44,8 @@ details on these changes.
 
 * The ``django-admin.py`` entry point will be removed.
 
+* The return value of ``call_command()`` will be removed.
+
 * The ``HttpRequest.is_ajax()`` method will be removed.
 
 * Support for the pre-Django 3.1 encoding format of cookies values used by

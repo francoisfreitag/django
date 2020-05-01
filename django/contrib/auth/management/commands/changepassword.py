@@ -42,9 +42,9 @@ class Command(BaseCommand):
                 UserModel.USERNAME_FIELD: username
             })
         except UserModel.DoesNotExist:
-            raise CommandError("user '%s' does not exist" % username)
+            raise CommandError("user '%s' does not exist", logger_args=(username,))
 
-        self.stdout.write("Changing password for user '%s'" % u)
+        self.logger.info("Changing password for user '%s'", str(u))
 
         MAX_TRIES = 3
         count = 0
@@ -54,22 +54,23 @@ class Command(BaseCommand):
             p1 = self._get_pass()
             p2 = self._get_pass("Password (again): ")
             if p1 != p2:
-                self.stdout.write('Passwords do not match. Please try again.')
+                self.logger.info('Passwords do not match. Please try again.')
                 count += 1
                 # Don't validate passwords that don't match.
                 continue
             try:
                 validate_password(p2, u)
             except ValidationError as err:
-                self.stderr.write('\n'.join(err.messages))
+                self.logger.error('\n'.join(err.messages))
                 count += 1
             else:
                 password_validated = True
 
         if count == MAX_TRIES:
-            raise CommandError("Aborting password change for user '%s' after %s attempts" % (u, count))
+            raise CommandError("Aborting password change for user '%s' after %s attempts",
+                               logger_args=(str(u), count))
 
         u.set_password(p1)
         u.save()
 
-        return "Password changed successfully for user '%s'" % u
+        return "Password changed successfully for user '%s'", str(u)

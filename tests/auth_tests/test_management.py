@@ -148,48 +148,49 @@ class ChangepasswordManagementCommandTestCase(TestCase):
     def setUpTestData(cls):
         cls.user = User.objects.create_user(username='joe', password='qwerty')
 
-    def setUp(self):
-        self.stdout = StringIO()
-        self.stderr = StringIO()
-
-    def tearDown(self):
-        self.stdout.close()
-        self.stderr.close()
-
     @mock.patch.object(getpass, 'getpass', return_value='password')
     def test_get_pass(self, mock_get_pass):
-        call_command('changepassword', username='joe', stdout=self.stdout)
+        with self.assertLogs('django.command') as logs:
+            call_command('changepassword', username='joe')
         self.assertIs(User.objects.get(username='joe').check_password('password'), True)
+        self.assertLogRecords(logs, [
+            ("INFO", "Changing password for user '%s'", ('joe',)),
+            ("INFO", "Password changed successfully for user '%s'", ('joe',)),
+        ])
 
     @mock.patch.object(getpass, 'getpass', return_value='')
     def test_get_pass_no_input(self, mock_get_pass):
-        with self.assertRaisesMessage(CommandError, 'aborted'):
-            call_command('changepassword', username='joe', stdout=self.stdout)
+        with self.assertRaisesMessage(CommandError, 'aborted'), self.assertLogs('django.command'):
+            call_command('changepassword', username='joe')
 
     @mock.patch.object(changepassword.Command, '_get_pass', return_value='new_password')
     def test_system_username(self, mock_get_pass):
         """The system username is used if --username isn't provided."""
         username = getpass.getuser()
         User.objects.create_user(username=username, password='qwerty')
-        call_command('changepassword', stdout=self.stdout)
+        with self.assertLogs('django.command'):
+            call_command('changepassword')
         self.assertIs(User.objects.get(username=username).check_password('new_password'), True)
 
     def test_nonexistent_username(self):
-        with self.assertRaisesMessage(CommandError, "user 'test' does not exist"):
-            call_command('changepassword', username='test', stdout=self.stdout)
+        with self.assertRaises(CommandError) as cm:
+            call_command('changepassword', username='test')
+        [message] = cm.exception.args
+        self.assertEqual(message, "user '%s' does not exist")
+        self.assertEqual(cm.exception.logger_args, ('test',))
 
     @mock.patch.object(changepassword.Command, '_get_pass', return_value='not qwerty')
     def test_that_changepassword_command_changes_joes_password(self, mock_get_pass):
         "Executing the changepassword management command should change joe's password"
         self.assertTrue(self.user.check_password('qwerty'))
 
-        call_command('changepassword', username='joe', stdout=self.stdout)
-        command_output = self.stdout.getvalue().strip()
+        with self.assertLogs('django.command') as logs:
+            call_command('changepassword', username='joe')
 
-        self.assertEqual(
-            command_output,
-            "Changing password for user 'joe'\nPassword changed successfully for user 'joe'"
-        )
+        self.assertLogRecords(logs, [
+            ("INFO", "Changing password for user '%s'", ('joe',)),
+            ("INFO", "Password changed successfully for user '%s'", ('joe',)),
+        ])
         self.assertTrue(User.objects.get(username="joe").check_password("not qwerty"))
 
     @mock.patch.object(changepassword.Command, '_get_pass', side_effect=lambda *args: str(args))
@@ -198,9 +199,11 @@ class ChangepasswordManagementCommandTestCase(TestCase):
         A CommandError should be thrown by handle() if the user enters in
         mismatched passwords three times.
         """
-        msg = "Aborting password change for user 'joe' after 3 attempts"
-        with self.assertRaisesMessage(CommandError, msg):
-            call_command('changepassword', username='joe', stdout=self.stdout, stderr=self.stderr)
+        with self.assertRaises(CommandError) as cm, self.assertLogs('django.command'):
+            call_command('changepassword', username='joe')
+        [message] = cm.exception.args
+        self.assertEqual(message, "Aborting password change for user '%s' after %s attempts")
+        self.assertEqual(cm.exception.logger_args, ('joe', 3))
 
     @mock.patch.object(changepassword.Command, '_get_pass', return_value='1234567890')
     def test_password_validation(self, mock_get_pass):
@@ -208,10 +211,12 @@ class ChangepasswordManagementCommandTestCase(TestCase):
         A CommandError should be raised if the user enters in passwords which
         fail validation three times.
         """
-        abort_msg = "Aborting password change for user 'joe' after 3 attempts"
-        with self.assertRaisesMessage(CommandError, abort_msg):
-            call_command('changepassword', username='joe', stdout=self.stdout, stderr=self.stderr)
-        self.assertIn('This password is entirely numeric.', self.stderr.getvalue())
+        with self.assertRaises(CommandError) as cm, self.assertLogs('django.command', 'ERROR') as logs:
+            call_command('changepassword', username='joe')
+        self.assertLogRecords(logs, 3 * [('ERROR', 'This password is entirely numeric.', ())])
+        [message] = cm.exception.args
+        self.assertEqual(message, "Aborting password change for user '%s' after %s attempts")
+        self.assertEqual(cm.exception.logger_args, ('joe', 3))
 
     @mock.patch.object(changepassword.Command, '_get_pass', return_value='not qwerty')
     def test_that_changepassword_command_works_with_nonascii_output(self, mock_get_pass):
@@ -221,7 +226,8 @@ class ChangepasswordManagementCommandTestCase(TestCase):
         """
         # 'Julia' with accented 'u':
         User.objects.create_user(username='J\xfalia', password='qwerty')
-        call_command('changepassword', username='J\xfalia', stdout=self.stdout)
+        with self.assertLogs('django.command'):
+            call_command('changepassword', username='J\xfalia')
 
 
 class MultiDBChangepasswordManagementCommandTestCase(TestCase):
@@ -235,14 +241,12 @@ class MultiDBChangepasswordManagementCommandTestCase(TestCase):
         user = User.objects.db_manager('other').create_user(username='joe', password='qwerty')
         self.assertTrue(user.check_password('qwerty'))
 
-        out = StringIO()
-        call_command('changepassword', username='joe', database='other', stdout=out)
-        command_output = out.getvalue().strip()
-
-        self.assertEqual(
-            command_output,
-            "Changing password for user 'joe'\nPassword changed successfully for user 'joe'"
-        )
+        with self.assertLogs('django.command') as logs:
+            call_command('changepassword', username='joe', database='other')
+        self.assertLogRecords(logs, [
+            ('INFO', "Changing password for user '%s'", ('joe',)),
+            ('INFO', "Password changed successfully for user '%s'", ('joe',)),
+        ])
         self.assertTrue(User.objects.using('other').get(username="joe").check_password('not qwerty'))
 
 

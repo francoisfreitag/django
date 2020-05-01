@@ -30,6 +30,10 @@ def warn_deprecated_stdout_stderr():
     )
 
 
+def has_logger_args(output):
+    return isinstance(output, (list, tuple))
+
+
 class CommandError(Exception):
     """
     Exception class indicating a problem while executing a management
@@ -416,6 +420,11 @@ class BaseCommand:
             self.check_migrations()
         output = self.handle(*args, **options)
         if output:
+            # Separated log message and variables.
+            if has_logger_args(output):
+                output, *logger_args = output
+            else:
+                logger_args = ()
             if self.output_transaction:
                 connection = connections[options.get('database', DEFAULT_DB_ALIAS)]
                 output = '%s\n%s\n%s' % (
@@ -423,8 +432,8 @@ class BaseCommand:
                     output,
                     self.style.SQL_KEYWORD(connection.ops.end_transaction_sql()),
                 )
-            self.logger.info(output)
-        return output
+            self.logger.info(output, *logger_args)
+            return output % tuple(logger_args) if logger_args else output
 
     def check(self, app_configs=None, tags=None, display_num_errors=False,
               include_deployment_checks=False, fail_level=checks.ERROR,
@@ -550,11 +559,15 @@ class AppCommand(BaseCommand):
         except (LookupError, ImportError) as e:
             raise CommandError('%s. Are you sure your INSTALLED_APPS setting is correct?', logger_args=e)
         output = []
+        logger_args = []
         for app_config in app_configs:
             app_output = self.handle_app_config(app_config, **options)
             if app_output:
+                if has_logger_args(app_output):
+                    app_output, *app_logger_args = app_output
+                    logger_args.extend(app_logger_args)
                 output.append(app_output)
-        return '\n'.join(output)
+        return ('\n'.join(output), *logger_args)
 
     def handle_app_config(self, app_config, **options):
         """
@@ -579,18 +592,23 @@ class LabelCommand(BaseCommand):
     ``AppCommand`` instead.
     """
     label = 'label'
-    missing_args_message = "Enter at least one %s." % label
+    missing_args_message = "Enter at least one %s."
+    missing_args_args = (label,)
 
     def add_arguments(self, parser):
         parser.add_argument('args', metavar=self.label, nargs='+')
 
     def handle(self, *labels, **options):
         output = []
+        logger_args = []
         for label in labels:
             label_output = self.handle_label(label, **options)
             if label_output:
+                if has_logger_args(output):
+                    label_output, *label_logger_args = label_output
+                    logger_args.extend(label_logger_args)
                 output.append(label_output)
-        return '\n'.join(output)
+        return ('\n'.join(output), *logger_args)
 
     def handle_label(self, label, **options):
         """

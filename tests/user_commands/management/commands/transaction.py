@@ -7,4 +7,4 @@ class Command(BaseCommand):
     output_transaction = True
 
     def handle(self, *args, **options):
-        return 'Hello!'
+        return ('Hello!',)

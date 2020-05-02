@@ -369,9 +369,13 @@ class CommandTests(SimpleTestCase):
         self.assertIn(expected_output, combine_output(logs))
 
     def test_subparser(self):
-        out = StringIO()
-        management.call_command('subparser', 'foo', 12, stdout=out)
-        self.assertIn('bar', out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('subparser', 'foo', 12)
+        self.assertLogRecords(logs, [
+            ('INFO',
+             'verbosity,settings,pythonpath,traceback,no_color,force_color,skip_checks,bar',
+             ()),
+        ])
 
     def test_subparser_dest_args(self):
         out = StringIO()
@@ -384,9 +388,9 @@ class CommandTests(SimpleTestCase):
         self.assertIn('bar', out.getvalue())
 
     def test_subparser_invalid_option(self):
-        msg = "Error: invalid choice: 'test' (choose from 'foo')"
-        with self.assertRaisesMessage(CommandError, msg):
+        with self.assertRaises(CommandError) as cm:
             management.call_command('subparser', 'test', 12)
+        self.assertEqual(cm.exception.args, ("Error: invalid choice: 'test' (choose from 'foo')",))
         if PY37:
             # "required" option requires Python 3.7 and later.
             msg = 'Error: the following arguments are required: subcommand'

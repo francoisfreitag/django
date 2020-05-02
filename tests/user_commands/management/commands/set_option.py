@@ -7,4 +7,4 @@ class Command(BaseCommand):
         parser.add_argument('--set')
 
     def handle(self, **options):
-        self.stdout.write('Set %s' % options['set'])
+        self.logger.info('Set %s', options['set'])

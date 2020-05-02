@@ -31,18 +31,34 @@ from .management.commands import dance
     ],
 )
 class CommandTests(SimpleTestCase):
+    dance_options = (
+        'INFO',
+        'verbosity,settings,pythonpath,traceback,no_color,force_color,skip_checks,integer,style,example,option3',
+        (),
+    )
+
     def test_command(self):
-        out = StringIO()
-        management.call_command('dance', stdout=out)
-        self.assertIn("I don't feel like dancing Rock'n'Roll.\n", out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('dance')
+        self.assertLogRecords(logs, [
+            ('INFO', "I don't feel like dancing %s.", ("Rock'n'Roll",)),
+            self.dance_options,
+        ])
 
     def test_command_style(self):
-        out = StringIO()
-        management.call_command('dance', style='Jive', stdout=out)
-        self.assertIn("I don't feel like dancing Jive.\n", out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('dance', style='Jive')
+        self.assertLogRecords(logs, [
+            ('INFO', "I don't feel like dancing %s.", ('Jive',)),
+            self.dance_options,
+        ])
         # Passing options as arguments also works (thanks argparse)
-        management.call_command('dance', '--style', 'Jive', stdout=out)
-        self.assertIn("I don't feel like dancing Jive.\n", out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('dance', '--style', 'Jive')
+        self.assertLogRecords(logs, [
+            ('INFO', "I don't feel like dancing %s.", ('Jive',)),
+            self.dance_options,
+        ])
 
     def test_language_preserved(self):
         with translation.override('fr'):
@@ -110,19 +126,20 @@ class CommandTests(SimpleTestCase):
         When passing the long option name to call_command, the available option
         key is the option dest name (#22985).
         """
-        out = StringIO()
-        management.call_command('dance', stdout=out, opt_3=True)
-        self.assertIn("option3", out.getvalue())
-        self.assertNotIn("opt_3", out.getvalue())
-        self.assertNotIn("opt-3", out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('dance', opt_3=True)
+        output = str(logs)
+        self.assertIn("option3", output)
+        self.assertNotIn("opt_3", output)
+        self.assertNotIn("opt-3", output)
 
     def test_call_command_option_parsing_non_string_arg(self):
         """
         It should be possible to pass non-string arguments to call_command.
         """
-        out = StringIO()
-        management.call_command('dance', 1, verbosity=0, stdout=out)
-        self.assertIn("You passed 1 as a positional argument.", out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('dance', 1, verbosity=0)
+        self.assertLogRecords(logs, [('INFO', 'You passed %d as a positional argument.', (1,))])
 
     def test_calling_a_command_with_only_empty_parameter_should_ends_gracefully(self):
         with self.assertLogs('django.command') as logs:

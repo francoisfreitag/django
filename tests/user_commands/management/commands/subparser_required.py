@@ -10,4 +10,4 @@ class Command(BaseCommand):
         parser_foo_2.add_argument('--bar', required=True)
 
     def handle(self, *args, **options):
-        self.stdout.write(','.join(options))
+        self.logger.info(','.join(options))

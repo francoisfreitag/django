@@ -387,9 +387,13 @@ class CommandTests(SimpleTestCase):
         ])
 
     def test_subparser_dest_required_args(self):
-        out = StringIO()
-        management.call_command('subparser_required', 'foo_1', 'foo_2', bar=12, stdout=out)
-        self.assertIn('bar', out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('subparser_required', 'foo_1', 'foo_2', bar=12)
+        self.assertLogRecords(logs, [
+            ('INFO',
+             'verbosity,settings,pythonpath,traceback,no_color,force_color,skip_checks,subcommand_1,subcommand_2,bar',
+             ()),
+        ])
 
     def test_subparser_invalid_option(self):
         with self.assertRaises(CommandError) as cm:

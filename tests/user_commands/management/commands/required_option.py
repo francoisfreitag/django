@@ -8,4 +8,4 @@ class Command(BaseCommand):
         parser.add_argument('-t', '--need-me-too', required=True, dest='needme2')
 
     def handle(self, *args, **options):
-        self.stdout.write(','.join(options))
+        self.logger.info(','.join(options))

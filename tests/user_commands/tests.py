@@ -37,6 +37,12 @@ class CommandTests(SimpleTestCase):
         (),
     )
 
+    required_options = (
+        'INFO',
+        ('verbosity,settings,pythonpath,traceback,no_color,force_color,skip_checks,need_me,needme2'),
+        ()
+    )
+
     def test_command(self):
         with self.assertLogs('django.command') as logs:
             management.call_command('dance')
@@ -242,16 +248,14 @@ class CommandTests(SimpleTestCase):
             management.call_command('dance', unrecognized=1, unrecognized2=1)
 
     def test_call_command_with_required_parameters_in_options(self):
-        out = StringIO()
-        management.call_command('required_option', need_me='foo', needme2='bar', stdout=out)
-        self.assertIn('need_me', out.getvalue())
-        self.assertIn('needme2', out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('required_option', need_me='foo', needme2='bar')
+        self.assertLogRecords(logs, [self.required_options])
 
     def test_call_command_with_required_parameters_in_mixed_options(self):
-        out = StringIO()
-        management.call_command('required_option', '--need-me=foo', needme2='bar', stdout=out)
-        self.assertIn('need_me', out.getvalue())
-        self.assertIn('needme2', out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('required_option', '--need-me=foo', needme2='bar')
+        self.assertLogRecords(logs, [self.required_options])
 
     def test_command_add_arguments_after_common_arguments(self):
         out = StringIO()

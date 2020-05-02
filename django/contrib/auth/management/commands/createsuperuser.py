@@ -57,8 +57,8 @@ class Command(BaseCommand):
                 if field.remote_field.through and not field.remote_field.through._meta.auto_created:
                     raise CommandError(
                         "Required field '%s' specifies a many-to-many "
-                        "relation through model, which is not supported."
-                        % field_name
+                        "relation through model, which is not supported.",
+                        logger_args=(field_name,)
                     )
                 else:
                     parser.add_argument(
@@ -99,20 +99,22 @@ class Command(BaseCommand):
                     raise NotRunningInTTYException
                 default_username = get_default_username(database=database)
                 if username:
-                    error_msg = self._validate_username(username, verbose_field_name, database)
-                    if error_msg:
-                        self.stderr.write(error_msg)
+                    errors = self._validate_username(username, verbose_field_name, database)
+                    if errors:
+                        error_msg, error_args = errors
+                        self.logger.error(error_msg, *error_args)
                         username = None
                 elif username == '':
-                    raise CommandError('%s cannot be blank.' % capfirst(verbose_field_name))
+                    raise CommandError('%s cannot be blank.', logger_args=(capfirst(verbose_field_name),))
                 # Prompt for username.
                 while username is None:
                     message = self._get_input_message(self.username_field, default_username)
                     username = self.get_input_data(self.username_field, message, default_username)
                     if username:
-                        error_msg = self._validate_username(username, verbose_field_name, database)
-                        if error_msg:
-                            self.stderr.write(error_msg)
+                        errors = self._validate_username(username, verbose_field_name, database)
+                        if errors:
+                            error_msg, error_args = errors
+                            self.logger.error(error_msg, *error_args)
                             username = None
                             continue
                 user_data[self.UserModel.USERNAME_FIELD] = username
@@ -131,7 +133,7 @@ class Command(BaseCommand):
                         if field.many_to_many and input_value:
                             if not input_value.strip():
                                 user_data[field_name] = None
-                                self.stderr.write('Error: This field cannot be blank.')
+                                self.logger.error('Error: This field cannot be blank.')
                                 continue
                             user_data[field_name] = [pk.strip() for pk in input_value.split(',')]
                         if not field.many_to_many:
@@ -146,17 +148,17 @@ class Command(BaseCommand):
                     password = getpass.getpass()
                     password2 = getpass.getpass('Password (again): ')
                     if password != password2:
-                        self.stderr.write("Error: Your passwords didn't match.")
+                        self.logger.error("Error: Your passwords didn't match.")
                         # Don't validate passwords that don't match.
                         continue
                     if password.strip() == '':
-                        self.stderr.write("Error: Blank passwords aren't allowed.")
+                        self.logger.error("Error: Blank passwords aren't allowed.")
                         # Don't validate blank passwords.
                         continue
                     try:
                         validate_password(password2, self.UserModel(**fake_user_data))
                     except exceptions.ValidationError as err:
-                        self.stderr.write('\n'.join(err.messages))
+                        self.logger.error('\n'.join(err.messages))
                         response = input('Bypass password validation and create user anyway? [y/N]: ')
                         if response.lower() != 'y':
                             continue
@@ -171,31 +173,33 @@ class Command(BaseCommand):
                 if username is None:
                     username = os.environ.get('DJANGO_SUPERUSER_' + self.UserModel.USERNAME_FIELD.upper())
                 if username is None:
-                    raise CommandError('You must use --%s with --noinput.' % self.UserModel.USERNAME_FIELD)
+                    raise CommandError('You must use --%s with --noinput.',
+                                       logger_args=(self.UserModel.USERNAME_FIELD,))
                 else:
-                    error_msg = self._validate_username(username, verbose_field_name, database)
-                    if error_msg:
-                        raise CommandError(error_msg)
+                    errors = self._validate_username(username, verbose_field_name, database)
+                    if errors:
+                        error_msg, error_args = errors
+                        raise CommandError(error_msg, logger_args=error_args)
 
                 user_data[self.UserModel.USERNAME_FIELD] = username
                 for field_name in self.UserModel.REQUIRED_FIELDS:
                     env_var = 'DJANGO_SUPERUSER_' + field_name.upper()
                     value = options[field_name] or os.environ.get(env_var)
                     if not value:
-                        raise CommandError('You must use --%s with --noinput.' % field_name)
+                        raise CommandError('You must use --%s with --noinput.', logger_args=(field_name,))
                     field = self.UserModel._meta.get_field(field_name)
                     user_data[field_name] = field.clean(value, None)
 
             self.UserModel._default_manager.db_manager(database).create_superuser(**user_data)
             if options['verbosity'] >= 1:
-                self.stdout.write("Superuser created successfully.")
+                self.logger.info('Superuser created successfully.')
         except KeyboardInterrupt:
-            self.stderr.write('\nOperation cancelled.')
+            self.logger.error('\nOperation cancelled.')
             sys.exit(1)
         except exceptions.ValidationError as e:
             raise CommandError('; '.join(e.messages))
         except NotRunningInTTYException:
-            self.stdout.write(
+            self.logger.info(
                 'Superuser creation skipped due to not running in a TTY. '
                 'You can run `manage.py createsuperuser` in your project '
                 'to create one manually.'
@@ -212,7 +216,7 @@ class Command(BaseCommand):
         try:
             val = field.clean(raw_value, None)
         except exceptions.ValidationError as e:
-            self.stderr.write("Error: %s" % '; '.join(e.messages))
+            self.logger.error('Error: ' + '; '.join(['%s'] * len(e.messages)), *e.messages)
             val = None
 
         return val
@@ -235,10 +239,10 @@ class Command(BaseCommand):
             except self.UserModel.DoesNotExist:
                 pass
             else:
-                return 'Error: That %s is already taken.' % verbose_field_name
+                return 'Error: That %s is already taken.', (verbose_field_name,)
         if not username:
-            return '%s cannot be blank.' % capfirst(verbose_field_name)
+            return '%s cannot be blank.', (capfirst(verbose_field_name),)
         try:
             self.username_field.clean(username, None)
         except exceptions.ValidationError as e:
-            return '; '.join(e.messages)
+            return '; '.join(e.messages), ()

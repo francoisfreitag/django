@@ -1,5 +1,4 @@
 import os
-from io import StringIO
 from unittest import mock
 
 from admin_scripts.tests import AdminScriptTestCase
@@ -263,9 +262,9 @@ class CommandTests(SimpleTestCase):
         self.assertLogRecords(logs, [self.required_options])
 
     def test_command_add_arguments_after_common_arguments(self):
-        out = StringIO()
-        management.call_command('common_args', stdout=out)
-        self.assertIn('Detected that --version already exists', out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('common_args')
+        self.assertLogRecords(logs, [('INFO', 'Detected that --version already exists', ())])
 
     def test_mutually_exclusive_group_required_options(self):
         with self.assertLogs('django.command') as logs:

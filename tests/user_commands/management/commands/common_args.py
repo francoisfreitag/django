@@ -13,4 +13,4 @@ class Command(BaseCommand):
             raise CommandError('--version argument does no yet exist')
 
     def handle(self, *args, **options):
-        return 'Detected that --version already exists'
+        return ('Detected that --version already exists',)

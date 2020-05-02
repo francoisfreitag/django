@@ -12,8 +12,8 @@ class Command(BaseCommand):
         app_labels = set(app_labels)
 
         if options['empty']:
-            self.stdout.write()
-            self.stdout.write("Dave, I can't do that.")
+            self.logger.info('')
+            self.logger.info("Dave, I can't do that.")
             return
 
         if not app_labels:
@@ -24,4 +24,4 @@ class Command(BaseCommand):
             if app_label.startswith('--'):
                 raise CommandError("Sorry, Dave, I can't let you do that.")
 
-        self.stdout.write("Dave, my mind is going. I can feel it. I can feel it.")
+        self.logger.info('Dave, my mind is going. I can feel it. I can feel it.')

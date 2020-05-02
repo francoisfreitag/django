@@ -22,6 +22,10 @@ from django.utils.version import PY37
 from .management.commands import dance
 
 
+def combine_logs(logs):
+    return "\n".join(((log.msg % log.args) for log in logs.records))
+
+
 # A minimal set of apps to avoid system checks running on all apps.
 @override_settings(
     INSTALLED_APPS=[
@@ -263,18 +267,45 @@ class CommandTests(SimpleTestCase):
         self.assertIn('Detected that --version already exists', out.getvalue())
 
     def test_mutually_exclusive_group_required_options(self):
-        out = StringIO()
-        management.call_command('mutually_exclusive_required', foo_id=1, stdout=out)
-        self.assertIn('foo_id', out.getvalue())
-        management.call_command('mutually_exclusive_required', foo_name='foo', stdout=out)
-        self.assertIn('foo_name', out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('mutually_exclusive_required', foo_id=1)
+        self.assertLogRecords(
+            logs,
+            [
+                ('INFO', '%s=%s', ('verbosity', 1)),
+                ('INFO', '%s=%s', ('traceback', False)),
+                ('INFO', '%s=%s', ('no_color', False)),
+                ('INFO', '%s=%s', ('force_color', False)),
+                ('INFO', '%s=%s', ('skip_checks', True)),
+                ('INFO', '%s=%s', ('foo_id', 1)),
+                ('INFO', '%s=%s', ('flag_false', True)),
+                ('INFO', '%s=%s', ('flag_true', False)),
+            ],
+        )
+        with self.assertLogs('django.command') as logs:
+            management.call_command('mutually_exclusive_required', foo_name='foo')
+        self.assertLogRecords(
+            logs,
+            [
+                ('INFO', '%s=%s', ('verbosity', 1)),
+                ('INFO', '%s=%s', ('traceback', False)),
+                ('INFO', '%s=%s', ('no_color', False)),
+                ('INFO', '%s=%s', ('force_color', False)),
+                ('INFO', '%s=%s', ('skip_checks', True)),
+                ('INFO', '%s=%s', ('foo_name', 'foo')),
+                ('INFO', '%s=%s', ('flag_false', True)),
+                ('INFO', '%s=%s', ('flag_true', False)),
+            ],
+        )
         msg = (
             'Error: one of the arguments --foo-id --foo-name --foo-list '
             '--append_const --const --count --flag_false --flag_true is '
             'required'
         )
-        with self.assertRaisesMessage(CommandError, msg):
-            management.call_command('mutually_exclusive_required', stdout=out)
+        with self.assertRaisesMessage(CommandError, msg) as cm:
+            management.call_command('mutually_exclusive_required')
+        [message] = cm.exception.args
+        self.assertEqual(message, msg)
 
     def test_mutually_exclusive_group_required_const_options(self):
         tests = [
@@ -285,21 +316,20 @@ class CommandTests(SimpleTestCase):
             ('flag_true', True),
         ]
         for arg, value in tests:
-            out = StringIO()
             expected_output = '%s=%s' % (arg, value)
             with self.subTest(arg=arg):
-                management.call_command(
-                    'mutually_exclusive_required',
-                    '--%s' % arg,
-                    stdout=out,
-                )
-                self.assertIn(expected_output, out.getvalue())
-                out.truncate(0)
-                management.call_command(
-                    'mutually_exclusive_required',
-                    **{arg: value, 'stdout': out},
-                )
-                self.assertIn(expected_output, out.getvalue())
+                with self.assertLogs('django.command') as logs:
+                    management.call_command(
+                        'mutually_exclusive_required',
+                        '--%s' % arg,
+                    )
+                self.assertIn(expected_output, combine_logs(logs))
+                with self.assertLogs('django.command') as logs:
+                    management.call_command(
+                        'mutually_exclusive_required',
+                        **{arg: value},
+                    )
+                self.assertIn(expected_output, combine_logs(logs))
 
     def test_required_list_option(self):
         tests = [
@@ -309,13 +339,9 @@ class CommandTests(SimpleTestCase):
         for command in ['mutually_exclusive_required', 'required_list_option']:
             for args, kwargs in tests:
                 with self.subTest(command=command, args=args, kwargs=kwargs):
-                    out = StringIO()
-                    management.call_command(
-                        command,
-                        *args,
-                        **{**kwargs, 'stdout': out},
-                    )
-                    self.assertIn('foo_list=[1, 2]', out.getvalue())
+                    with self.assertLogs('django.command') as logs:
+                        management.call_command(command, *args, **kwargs)
+                    self.assertIn('foo_list=[1, 2]', combine_logs(logs))
 
     def test_required_const_options(self):
         args = {
@@ -328,20 +354,19 @@ class CommandTests(SimpleTestCase):
         expected_output = '\n'.join(
             '%s=%s' % (arg, value) for arg, value in args.items()
         )
-        out = StringIO()
-        management.call_command(
-            'required_constant_option',
-            '--append_const',
-            '--const',
-            '--count',
-            '--flag_false',
-            '--flag_true',
-            stdout=out,
-        )
-        self.assertIn(expected_output, out.getvalue())
-        out.truncate(0)
-        management.call_command('required_constant_option', **{**args, 'stdout': out})
-        self.assertIn(expected_output, out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command(
+                'required_constant_option',
+                '--append_const',
+                '--const',
+                '--count',
+                '--flag_false',
+                '--flag_true',
+            )
+        self.assertIn(expected_output, combine_output(logs))
+        with self.assertLogs('django.command') as logs:
+            management.call_command('required_constant_option', **args)
+        self.assertIn(expected_output, combine_output(logs))
 
     def test_subparser(self):
         out = StringIO()

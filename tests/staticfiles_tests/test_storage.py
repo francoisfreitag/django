@@ -170,10 +170,10 @@ class TestHashedFiles:
     )
     def test_import_loop(self):
         finders.get_finder.cache_clear()
-        err = StringIO()
-        with self.assertRaisesMessage(RuntimeError, 'Max post-process passes exceeded'):
-            call_command('collectstatic', interactive=False, verbosity=0, stderr=err)
-        self.assertEqual("Post-processing 'All' failed!\n\n", err.getvalue())
+        msg = 'Max post-process passes exceeded'
+        with self.assertRaisesMessage(RuntimeError, msg), self.assertLogs('django.command', 'ERROR') as logs:
+            call_command('collectstatic', interactive=False, verbosity=0)
+        self.assertLogRecords(logs, [('ERROR', "Post-processing '%s' failed!\n", ('All',))])
         self.assertPostCondition()
 
     def test_post_processing(self):
@@ -223,10 +223,9 @@ class TestHashedFiles:
         post_processing indicates the origin of the error when it fails.
         """
         finders.get_finder.cache_clear()
-        err = StringIO()
-        with self.assertRaises(Exception):
-            call_command('collectstatic', interactive=False, verbosity=0, stderr=err)
-        self.assertEqual("Post-processing 'faulty.css' failed!\n\n", err.getvalue())
+        with self.assertRaises(Exception), self.assertLogs('django.command', 'ERROR') as logs:
+            call_command('collectstatic', interactive=False, verbosity=0)
+        self.assertLogRecords(logs, [('ERROR', "Post-processing '%s' failed!\n", ('faulty.css',))])
         self.assertPostCondition()
 
 

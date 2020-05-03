@@ -115,11 +115,10 @@ class TestFindStatic(TestDefaults, CollectionTestCase):
 class TestConfiguration(StaticFilesTestCase):
     def test_location_empty(self):
         msg = 'without having set the STATIC_ROOT setting to a filesystem path'
-        err = StringIO()
         for root in ['', None]:
             with override_settings(STATIC_ROOT=root):
                 with self.assertRaisesMessage(ImproperlyConfigured, msg):
-                    call_command('collectstatic', interactive=False, verbosity=0, stderr=err)
+                    call_command('collectstatic', interactive=False, verbosity=0)
 
     def test_local_storage_detection_helper(self):
         staticfiles_storage = storage.staticfiles_storage
@@ -200,35 +199,36 @@ class TestCollectionVerbosity(CollectionTestCase):
     staticfiles_copied_msg = 'static files copied to'
 
     def test_verbosity_0(self):
-        stdout = StringIO()
-        self.run_collectstatic(verbosity=0, stdout=stdout)
-        self.assertEqual(stdout.getvalue(), '')
+        with self.assertNoLogs('django.command'):
+            self.run_collectstatic(verbosity=0)
 
     def test_verbosity_1(self):
-        stdout = StringIO()
-        self.run_collectstatic(verbosity=1, stdout=stdout)
-        output = stdout.getvalue()
+        with self.assertLogs('django.command') as logs:
+            self.run_collectstatic(verbosity=1)
+        output = '\n'.join(logs.output)
         self.assertIn(self.staticfiles_copied_msg, output)
         self.assertNotIn(self.copying_msg, output)
 
     def test_verbosity_2(self):
-        stdout = StringIO()
-        self.run_collectstatic(verbosity=2, stdout=stdout)
-        output = stdout.getvalue()
+        with self.assertLogs('django.command') as logs:
+            self.run_collectstatic(verbosity=2)
+        output = '\n'.join(logs.output)
         self.assertIn(self.staticfiles_copied_msg, output)
         self.assertIn(self.copying_msg, output)
 
     @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.ManifestStaticFilesStorage')
     def test_verbosity_1_with_post_process(self):
-        stdout = StringIO()
-        self.run_collectstatic(verbosity=1, stdout=stdout, post_process=True)
-        self.assertNotIn(self.post_process_msg, stdout.getvalue())
+        with self.assertLogs('django.command') as logs:
+            self.run_collectstatic(verbosity=1, post_process=True)
+        output = '\n'.join(logs.output)
+        self.assertNotIn(self.post_process_msg, output)
 
     @override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.ManifestStaticFilesStorage')
     def test_verbosity_2_with_post_process(self):
-        stdout = StringIO()
-        self.run_collectstatic(verbosity=2, stdout=stdout, post_process=True)
-        self.assertIn(self.post_process_msg, stdout.getvalue())
+        with self.assertLogs('django.command') as logs:
+            self.run_collectstatic(verbosity=2, post_process=True)
+        output = '\n'.join(logs.output)
+        self.assertIn(self.post_process_msg, output)
 
 
 class TestCollectionClear(CollectionTestCase):
@@ -269,37 +269,40 @@ class TestInteractiveMessages(CollectionTestCase):
     def test_warning_when_clearing_staticdir(self):
         stdout = StringIO()
         self.run_collectstatic()
-        with mock.patch('builtins.input', side_effect=self.mock_input(stdout)):
-            call_command('collectstatic', interactive=True, clear=True, stdout=stdout)
+        with mock.patch(
+            'builtins.input', side_effect=self.mock_input(stdout)
+        ), self.assertLogs('django.command') as logs:
+            call_command('collectstatic', interactive=True, clear=True)
 
-        output = stdout.getvalue()
+        output = stdout.getvalue() + '\n'.join(logs.output)
         self.assertNotIn(self.overwrite_warning_msg, output)
         self.assertIn(self.delete_warning_msg, output)
 
     def test_warning_when_overwriting_files_in_staticdir(self):
         stdout = StringIO()
         self.run_collectstatic()
-        with mock.patch('builtins.input', side_effect=self.mock_input(stdout)):
-            call_command('collectstatic', interactive=True, stdout=stdout)
-        output = stdout.getvalue()
+        with mock.patch(
+            'builtins.input', side_effect=self.mock_input(stdout)
+        ), self.assertLogs('django.command') as logs:
+            call_command('collectstatic', interactive=True)
+        output = stdout.getvalue() + '\n'.join(logs.output)
         self.assertIn(self.overwrite_warning_msg, output)
         self.assertNotIn(self.delete_warning_msg, output)
 
     def test_no_warning_when_staticdir_does_not_exist(self):
-        stdout = StringIO()
         shutil.rmtree(settings.STATIC_ROOT)
-        call_command('collectstatic', interactive=True, stdout=stdout)
-        output = stdout.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('collectstatic', interactive=True)
+        output = '\n'.join(logs.output)
         self.assertNotIn(self.overwrite_warning_msg, output)
         self.assertNotIn(self.delete_warning_msg, output)
         self.assertIn(self.files_copied_msg, output)
 
     def test_no_warning_for_empty_staticdir(self):
-        stdout = StringIO()
         with tempfile.TemporaryDirectory(prefix='collectstatic_empty_staticdir_test') as static_dir:
-            with override_settings(STATIC_ROOT=static_dir):
-                call_command('collectstatic', interactive=True, stdout=stdout)
-        output = stdout.getvalue()
+            with override_settings(STATIC_ROOT=static_dir), self.assertLogs('django.command') as logs:
+                call_command('collectstatic', interactive=True)
+        output = '\n'.join(logs.output)
         self.assertNotIn(self.overwrite_warning_msg, output)
         self.assertNotIn(self.delete_warning_msg, output)
         self.assertIn(self.files_copied_msg, output)
@@ -435,9 +438,9 @@ class TestCollectionOverwriteWarning(CollectionTestCase):
         the command at highest verbosity, which is why we can't
         just call e.g. BaseCollectionTestCase.run_collectstatic()
         """
-        out = StringIO()
-        call_command('collectstatic', interactive=False, verbosity=3, stdout=out, **kwargs)
-        return out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('collectstatic', interactive=False, verbosity=3, **kwargs)
+        return '\n'.join(logs.output)
 
     def test_no_warning(self):
         """
@@ -493,10 +496,9 @@ class TestCollectionNeverCopyStorage(CollectionTestCase):
         NeverCopyRemoteStorage.get_modified_time() returns a datetime in the
         future to simulate an unmodified file.
         """
-        stdout = StringIO()
-        self.run_collectstatic(stdout=stdout, verbosity=2)
-        output = stdout.getvalue()
-        self.assertIn("Skipping 'test.txt' (not modified)", output)
+        with self.assertLogs('django.command') as logs:
+            self.run_collectstatic(verbosity=2)
+        self.assertIn("INFO:django.command:Skipping 'test.txt' (not modified)", logs.output)
 
 
 @unittest.skipUnless(symlinks_supported(), "Must be able to symlink to run this test.")

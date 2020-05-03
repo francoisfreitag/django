@@ -117,7 +117,8 @@ class Command(BaseCommand):
                         "Found another file with the destination path '%s'. It "
                         "will be ignored since only the first encountered file "
                         "is collected. If this is not what you want, make sure "
-                        "every static file has a unique path." % prefixed_path,
+                        "every static file has a unique path.",
+                        prefixed_path,
                         level=1,
                     )
 
@@ -127,17 +128,15 @@ class Command(BaseCommand):
                                                   dry_run=self.dry_run)
             for original_path, processed_path, processed in processor:
                 if isinstance(processed, Exception):
-                    self.stderr.write("Post-processing '%s' failed!" % original_path)
                     # Add a blank line before the traceback, otherwise it's
                     # too easy to miss the relevant part of the error message.
-                    self.stderr.write()
+                    self.logger.error("Post-processing '%s' failed!\n", original_path)
                     raise processed
                 if processed:
-                    self.log("Post-processed '%s' as '%s'" %
-                             (original_path, processed_path), level=2)
+                    self.log("Post-processed '%s' as '%s'", original_path, processed_path, level=2)
                     self.post_processed_files.append(original_path)
                 else:
-                    self.log("Skipped post-processing '%s'" % original_path)
+                    self.log("Skipped post-processing '%s'", original_path)
 
         return {
             'modified': self.copied_files + self.symlinked_files,
@@ -188,28 +187,27 @@ class Command(BaseCommand):
 
         if self.verbosity >= 1:
             modified_count = len(collected['modified'])
-            unmodified_count = len(collected['unmodified'])
-            post_processed_count = len(collected['post_processed'])
-            return (
-                "\n%(modified_count)s %(identifier)s %(action)s"
-                "%(destination)s%(unmodified)s%(post_processed)s."
-            ) % {
-                'modified_count': modified_count,
-                'identifier': 'static file' + ('' if modified_count == 1 else 's'),
-                'action': 'symlinked' if self.symlink else 'copied',
-                'destination': (" to '%s'" % destination_path if destination_path else ''),
-                'unmodified': (', %s unmodified' % unmodified_count if collected['unmodified'] else ''),
-                'post_processed': (collected['post_processed'] and
-                                   ', %s post-processed'
-                                   % post_processed_count or ''),
-            }
 
-    def log(self, msg, level=2):
+            summary = '\n%s static file' + ('' if modified_count == 1 else 's') + ' %s'
+            args = [modified_count, 'symlinked' if self.symlink else 'copied']
+            if destination_path:
+                summary += " to '%s'"
+                args.append(destination_path)
+            if collected['unmodified']:
+                summary += ', %s unmodified'
+                args.append(len(collected['unmodified']))
+            if collected['post_processed']:
+                summary += ', %s post-processed'
+                args.append(len(collected['post_processed']))
+            summary += "."
+            return summary, *args
+
+    def log(self, msg, *args, level=2):
         """
         Small log helper
         """
         if self.verbosity >= level:
-            self.stdout.write(msg)
+            self.logger.info(msg, *args)
 
     def is_local_storage(self):
         return isinstance(self.storage, FileSystemStorage)
@@ -225,9 +223,9 @@ class Command(BaseCommand):
         for f in files:
             fpath = os.path.join(path, f)
             if self.dry_run:
-                self.log("Pretending to delete '%s'" % fpath, level=1)
+                self.log("Pretending to delete '%s'", fpath, level=1)
             else:
-                self.log("Deleting '%s'" % fpath, level=1)
+                self.log("Deleting '%s'", fpath, level=1)
                 try:
                     full_path = self.storage.path(fpath)
                 except NotImplementedError:
@@ -281,13 +279,13 @@ class Command(BaseCommand):
                     if file_is_unmodified and can_skip_unmodified_files:
                         if prefixed_path not in self.unmodified_files:
                             self.unmodified_files.append(prefixed_path)
-                        self.log("Skipping '%s' (not modified)" % path)
+                        self.log("Skipping '%s' (not modified)", path)
                         return False
             # Then delete the existing file if really needed
             if self.dry_run:
-                self.log("Pretending to delete '%s'" % path)
+                self.log("Pretending to delete '%s'", path)
             else:
-                self.log("Deleting '%s'" % path)
+                self.log("Deleting '%s'", path)
                 self.storage.delete(prefixed_path)
         return True
 
@@ -297,7 +295,7 @@ class Command(BaseCommand):
         """
         # Skip this file if it was already copied earlier
         if prefixed_path in self.symlinked_files:
-            return self.log("Skipping '%s' (already linked earlier)" % path)
+            return self.log("Skipping '%s' (already linked earlier)", path)
         # Delete the target file if needed or break
         if not self.delete_file(path, prefixed_path, source_storage):
             return
@@ -305,9 +303,9 @@ class Command(BaseCommand):
         source_path = source_storage.path(path)
         # Finally link the file
         if self.dry_run:
-            self.log("Pretending to link '%s'" % source_path, level=1)
+            self.log("Pretending to link '%s'", source_path, level=1)
         else:
-            self.log("Linking '%s'" % source_path, level=2)
+            self.log("Linking '%s'", source_path, level=2)
             full_path = self.storage.path(prefixed_path)
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
             try:
@@ -316,12 +314,12 @@ class Command(BaseCommand):
                 os.symlink(source_path, full_path)
             except AttributeError:
                 import platform
-                raise CommandError("Symlinking is not supported by Python %s." %
-                                   platform.python_version())
+                raise CommandError("Symlinking is not supported by Python %s.",
+                                   logger_args=(platform.python_version(),))
             except NotImplementedError:
                 import platform
                 raise CommandError("Symlinking is not supported in this "
-                                   "platform (%s)." % platform.platform())
+                                   "platform (%s).", logger_args=(platform.platform(),))
             except OSError as e:
                 raise CommandError(e)
         if prefixed_path not in self.symlinked_files:
@@ -333,7 +331,7 @@ class Command(BaseCommand):
         """
         # Skip this file if it was already copied earlier
         if prefixed_path in self.copied_files:
-            return self.log("Skipping '%s' (already copied earlier)" % path)
+            return self.log("Skipping '%s' (already copied earlier)", path)
         # Delete the target file if needed or break
         if not self.delete_file(path, prefixed_path, source_storage):
             return
@@ -341,9 +339,9 @@ class Command(BaseCommand):
         source_path = source_storage.path(path)
         # Finally start copying
         if self.dry_run:
-            self.log("Pretending to copy '%s'" % source_path, level=1)
+            self.log("Pretending to copy '%s'", source_path, level=1)
         else:
-            self.log("Copying '%s'" % source_path, level=2)
+            self.log("Copying '%s'", source_path, level=2)
             with source_storage.open(path) as source_file:
                 self.storage.save(prefixed_path, source_file)
         self.copied_files.append(prefixed_path)

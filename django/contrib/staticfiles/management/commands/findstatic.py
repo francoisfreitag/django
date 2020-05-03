@@ -19,25 +19,28 @@ class Command(LabelCommand):
         verbosity = options['verbosity']
         result = finders.find(path, all=options['all'])
         if verbosity >= 2:
-            searched_locations = (
-                "\nLooking in the following locations:\n  %s" %
-                "\n  ".join([str(loc) for loc in finders.searched_locations])
-            )
+            locations = finders.searched_locations
+            searched_locations = '\nLooking in the following locations:\n  {0}'.format(
+                '\n  '.join(['%s'] * len(locations)))
+            searched_locations_args = [str(loc) for loc in locations]
         else:
             searched_locations = ''
+            searched_locations_args = []
         if result:
             if not isinstance(result, (list, tuple)):
                 result = [result]
-            result = (os.path.realpath(path) for path in result)
+            result = [os.path.realpath(path) for path in result]
             if verbosity >= 1:
-                file_list = '\n  '.join(result)
-                return ("Found '%s' here:\n  %s%s" %
-                        (path, file_list, searched_locations))
+                file_list = '\n  '.join(['%s'] * len(result))
+                return ("Found '%s' here:\n  {}{}".format(file_list, searched_locations),
+                        path, *result, *searched_locations_args)
             else:
-                return '\n'.join(result)
+                return ('\n'.join(['%s'] * len(result)), *result)
         else:
-            message = ["No matching file found for '%s'." % path]
+            message = "No matching file found for '%s'."
+            args = [path]
             if verbosity >= 2:
-                message.append(searched_locations)
+                message += "\n" + searched_locations
+                args.extend(searched_locations_args)
             if verbosity >= 1:
-                self.stderr.write('\n'.join(message))
+                self.logger.error(message, *args)

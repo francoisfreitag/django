@@ -63,7 +63,8 @@ class TestFindStatic(TestDefaults, CollectionTestCase):
     Test ``findstatic`` management command.
     """
     def _get_file(self, filepath):
-        path = call_command('findstatic', filepath, all=False, verbosity=0, stdout=StringIO())
+        with self.assertLogs('django.command'):
+            path = call_command('findstatic', filepath, all=False, verbosity=0)
         with open(path, encoding='utf-8') as f:
             return f.read()
 
@@ -71,7 +72,8 @@ class TestFindStatic(TestDefaults, CollectionTestCase):
         """
         findstatic returns all candidate files if run without --first and -v1.
         """
-        result = call_command('findstatic', 'test/file.txt', verbosity=1, stdout=StringIO())
+        with self.assertLogs('django.command'):
+            result = call_command('findstatic', 'test/file.txt', verbosity=1)
         lines = [line.strip() for line in result.split('\n')]
         self.assertEqual(len(lines), 3)  # three because there is also the "Found <file> here" line
         self.assertIn('project', lines[1])
@@ -81,7 +83,8 @@ class TestFindStatic(TestDefaults, CollectionTestCase):
         """
         findstatic returns all candidate files if run without --first and -v0.
         """
-        result = call_command('findstatic', 'test/file.txt', verbosity=0, stdout=StringIO())
+        with self.assertLogs('django.command'):
+            result = call_command('findstatic', 'test/file.txt', verbosity=0)
         lines = [line.strip() for line in result.split('\n')]
         self.assertEqual(len(lines), 2)
         self.assertIn('project', lines[0])
@@ -92,7 +95,8 @@ class TestFindStatic(TestDefaults, CollectionTestCase):
         findstatic returns all candidate files if run without --first and -v2.
         Also, test that findstatic returns the searched locations with -v2.
         """
-        result = call_command('findstatic', 'test/file.txt', verbosity=2, stdout=StringIO())
+        with self.assertLogs('django.command'):
+            result = call_command('findstatic', 'test/file.txt', verbosity=2)
         lines = [line.strip() for line in result.split('\n')]
         self.assertIn('project', lines[1])
         self.assertIn('apps', lines[2])

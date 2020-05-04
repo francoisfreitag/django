@@ -1939,7 +1939,7 @@ Management commands can be tested with the
 :meth:`unittest.TestCase.assertLogs` allows verifying the output of the
 command.
 
-.. deprecated:: 3.1
+.. deprecated:: 3.2
 
     The output can be redirected into a ``StringIO`` instance::
 

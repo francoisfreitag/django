@@ -631,7 +631,7 @@ as explained in :ref:`django-db-logger`.
 ``django.command``
 ~~~~~~~~~~~~~~~~~~~
 
-.. versionadded:: 3.1
+.. versionadded:: 3.2
 
 Log messages related to management commands.
 

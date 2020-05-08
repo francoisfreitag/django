@@ -1,6 +1,8 @@
 import asyncio
 import difflib
 import json
+import logging
+import os
 import posixpath
 import sys
 import threading
@@ -37,8 +39,8 @@ from django.test.client import AsyncClient, Client
 from django.test.html import HTMLParseError, parse_html
 from django.test.signals import setting_changed, template_rendered
 from django.test.utils import (
-    CaptureQueriesContext, ContextList, compare_xml, modify_settings,
-    override_settings,
+    CaptureQueriesContext, ContextList, ProcessFilter, compare_xml,
+    modify_settings, override_settings,
 )
 from django.utils.functional import classproperty
 from django.views.static import serve
@@ -144,6 +146,24 @@ class _DatabaseFailure:
 
     def __call__(self):
         raise AssertionError(self.message)
+
+
+@contextmanager
+def _capture_logs(self, logger_name, level=None):
+    level = logging._nameToLevel.get(level, level) if level else logging.INFO
+    logger = logging.getLogger(logger_name)
+    old_handlers = logger.handlers[:]
+    old_level = logger.level
+    old_propagate = logger.propagate
+    logger.setLevel(level)
+    logger.propagate = False
+    handler = unittest.case._CapturingHandler()
+    handler.addFilter(ProcessFilter(os.getpid()))
+    logger.handlers = [handler]
+    yield handler.watcher
+    logger.handlers = old_handlers
+    logger.propagate = old_propagate
+    logger.setLevel(old_level)
 
 
 class SimpleTestCase(unittest.TestCase):
@@ -313,6 +333,9 @@ class SimpleTestCase(unittest.TestCase):
         reverts back to the original value when exiting the context.
         """
         return modify_settings(**kwargs)
+
+    def capture_logs(self, logger_name='', level='INFO'):
+        return _capture_logs(self, logger_name, level)
 
     def assertRedirects(self, response, expected_url, status_code=302,
                         target_status_code=200, msg_prefix='',

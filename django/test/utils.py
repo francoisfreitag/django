@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import re
 import sys
 import time
@@ -32,7 +33,7 @@ except ImportError:
 
 
 __all__ = (
-    'Approximate', 'ContextList', 'isolate_lru_cache', 'get_runner',
+    'Approximate', 'ContextList', 'ProcessFilter', 'isolate_lru_cache', 'get_runner',
     'modify_settings', 'override_settings',
     'requires_tz_support',
     'setup_test_environment', 'teardown_test_environment',
@@ -794,6 +795,16 @@ class override_script_prefix(TestContextDecorator):
 
     def disable(self):
         set_script_prefix(self.old_prefix)
+
+
+class ProcessFilter(logging.Filter):
+    def __init__(self, pid, *args, **kwargs):
+        self.pid = pid
+        super().__init__(*args, **kwargs)
+
+    def filter(self, record):
+        # print('Filtering:', os.getpid())
+        return os.getpid() == self.pid
 
 
 class LoggingCaptureMixin:

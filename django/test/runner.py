@@ -322,6 +322,8 @@ def _init_worker(counter):
         connection.settings_dict.update(settings_dict)
         connection.close()
 
+    # print("Runner:", os.getpid())
+
 
 def _run_subsuite(args):
     """

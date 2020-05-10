@@ -1406,8 +1406,8 @@ class ColorCommand(BaseCommand):
     requires_system_checks = []
 
     def handle(self, *args, **options):
-        self.stdout.write('Hello, world!', self.style.ERROR)
-        self.stderr.write('Hello, world!', self.style.ERROR)
+        self.logger.info(self.style.ERROR('Hello, world!'))
+        self.logger.error(self.style.ERROR('Hello, world!'))
 
 
 class CommandTypes(AdminScriptTestCase):
@@ -1490,52 +1490,53 @@ class CommandTypes(AdminScriptTestCase):
         self.assertNotEqual(style.ERROR('Hello, world!'), 'Hello, world!')
 
     def test_command_color(self):
-        out = StringIO()
-        err = StringIO()
-        command = ColorCommand(stdout=out, stderr=err)
-        call_command(command)
+        with self.assertLogs('django.command') as logs:
+            call_command(ColorCommand())
         if color.supports_color():
-            self.assertIn('Hello, world!\n', out.getvalue())
-            self.assertIn('Hello, world!\n', err.getvalue())
-            self.assertNotEqual(out.getvalue(), 'Hello, world!\n')
-            self.assertNotEqual(err.getvalue(), 'Hello, world!\n')
+            self.assertEqual(
+                logs.output,
+                ['INFO:django.command:\x1b[31;1mHello, world!\x1b[0m',
+                 'ERROR:django.command:\x1b[31;1mHello, world!\x1b[0m'],
+            )
         else:
-            self.assertEqual(out.getvalue(), 'Hello, world!\n')
-            self.assertEqual(err.getvalue(), 'Hello, world!\n')
+            self.assertEqual(
+                logs.output,
+                ['INFO:django.command:Hello, world!', 'ERROR:django.command:Hello, world!']
+            )
 
     def test_command_no_color(self):
         "--no-color prevent colorization of the output"
-        out = StringIO()
-        err = StringIO()
-        command = ColorCommand(stdout=out, stderr=err, no_color=True)
-        call_command(command)
-        self.assertEqual(out.getvalue(), 'Hello, world!\n')
-        self.assertEqual(err.getvalue(), 'Hello, world!\n')
+        expected = ['INFO:django.command:Hello, world!', 'ERROR:django.command:Hello, world!']
 
-        out = StringIO()
-        err = StringIO()
-        command = ColorCommand(stdout=out, stderr=err)
-        call_command(command, no_color=True)
-        self.assertEqual(out.getvalue(), 'Hello, world!\n')
-        self.assertEqual(err.getvalue(), 'Hello, world!\n')
+        command = ColorCommand(no_color=True)
+        with self.assertLogs('django.command') as logs:
+            call_command(command)
+        self.assertEqual(logs.output, expected)
+
+        command = ColorCommand()
+        with self.assertLogs('django.command'):
+            call_command(command, no_color=True)
+        self.assertEqual(logs.output, expected)
 
     def test_force_color_execute(self):
-        out = StringIO()
-        err = StringIO()
-        with mock.patch.object(sys.stdout, 'isatty', lambda: False):
-            command = ColorCommand(stdout=out, stderr=err)
+        with mock.patch.object(sys.stdout, 'isatty', lambda: False), self.assertLogs('django.command') as logs:
+            command = ColorCommand()
             call_command(command, force_color=True)
-        self.assertEqual(out.getvalue(), '\x1b[31;1mHello, world!\n\x1b[0m')
-        self.assertEqual(err.getvalue(), '\x1b[31;1mHello, world!\n\x1b[0m')
+        self.assertEqual(
+            logs.output,
+            ['INFO:django.command:\x1b[31;1mHello, world!\x1b[0m',
+             'ERROR:django.command:\x1b[31;1mHello, world!\x1b[0m'],
+        )
 
     def test_force_color_command_init(self):
-        out = StringIO()
-        err = StringIO()
-        with mock.patch.object(sys.stdout, 'isatty', lambda: False):
-            command = ColorCommand(stdout=out, stderr=err, force_color=True)
+        with mock.patch.object(sys.stdout, 'isatty', lambda: False), self.assertLogs('django.command') as logs:
+            command = ColorCommand(force_color=True)
             call_command(command)
-        self.assertEqual(out.getvalue(), '\x1b[31;1mHello, world!\n\x1b[0m')
-        self.assertEqual(err.getvalue(), '\x1b[31;1mHello, world!\n\x1b[0m')
+        self.assertEqual(
+            logs.output,
+            ['INFO:django.command:\x1b[31;1mHello, world!\x1b[0m',
+             'ERROR:django.command:\x1b[31;1mHello, world!\x1b[0m'],
+        )
 
     def test_no_color_force_color_mutually_exclusive_execute(self):
         msg = "The --no-color and --force-color options can't be used together."

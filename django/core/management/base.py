@@ -528,7 +528,7 @@ class BaseCommand:
         plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
         if plan:
             apps_waiting_migration = sorted({migration.app_label for migration, backwards in plan})
-            self.stdout.write(
+            self.logger.warning(
                 self.style.NOTICE(
                     "\nYou have %(unapplied_migration_count)s unapplied migration(s). "
                     "Your project may not work properly until you apply the "
@@ -538,7 +538,7 @@ class BaseCommand:
                     }
                 )
             )
-            self.stdout.write(self.style.NOTICE("Run 'python manage.py migrate' to apply them."))
+            self.logger.warning(self.style.NOTICE("Run 'python manage.py migrate' to apply them."))
 
     def handle(self, *args, **options):
         """

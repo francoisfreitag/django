@@ -66,8 +66,16 @@ class CommandParser(ArgumentParser):
     SystemExit in several occasions, as SystemExit is unacceptable when a
     command is called programmatically.
     """
-    def __init__(self, *, missing_args_message=None, called_from_command_line=None, **kwargs):
+    def __init__(
+            self,
+            *,
+            missing_args_message=None,
+            missing_args_logger_args=(),
+            called_from_command_line=None,
+            **kwargs
+    ):
         self.missing_args_message = missing_args_message
+        self.missing_args_logger_args = missing_args_logger_args
         self.called_from_command_line = called_from_command_line
         super().__init__(**kwargs)
 
@@ -75,14 +83,14 @@ class CommandParser(ArgumentParser):
         # Catch missing argument for a better error message
         if (self.missing_args_message and
                 not (args or any(not arg.startswith('-') for arg in args))):
-            self.error(self.missing_args_message)
+            self.error(self.missing_args_message, *self.missing_args_logger_args)
         return super().parse_args(args, namespace)
 
-    def error(self, message):
+    def error(self, message, *args):
         if self.called_from_command_line:
-            super().error(message)
+            super().error(message % args)
         else:
-            raise CommandError("Error: %s", logger_args=(message,))
+            raise CommandError(f'Error: {message}'.format(message), logger_args=args)
 
 
 def handle_default_options(options):
@@ -304,6 +312,7 @@ class BaseCommand:
             description=self.help or None,
             formatter_class=DjangoHelpFormatter,
             missing_args_message=getattr(self, 'missing_args_message', None),
+            missing_args_logger_args=getattr(self, 'missing_args_logger_args', ()),
             called_from_command_line=getattr(self, '_called_from_command_line', None),
             **kwargs
         )
@@ -593,7 +602,7 @@ class LabelCommand(BaseCommand):
     """
     label = 'label'
     missing_args_message = "Enter at least one %s."
-    missing_args_args = (label,)
+    missing_args_logger_args = (label,)
 
     def add_arguments(self, parser):
         parser.add_argument('args', metavar=self.label, nargs='+')

@@ -1646,8 +1646,7 @@ class CommandTypes(AdminScriptTestCase):
         Test run_from_argv properly terminates even with custom execute() (#19665)
         Also test proper traceback display.
         """
-        err = StringIO()
-        command = BaseCommand(stderr=err)
+        command = BaseCommand()
 
         def raise_command_error(*args, **kwargs):
             raise CommandError("Custom error")
@@ -1663,18 +1662,16 @@ class CommandTypes(AdminScriptTestCase):
         # this command should raise a SystemExit and don't print any
         # traceback to the stderr.
         command.execute = raise_command_error
-        err.truncate(0)
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs('django.command', 'ERROR') as logs:
             command.run_from_argv(['', ''])
-        err_message = err.getvalue()
+        [err_message] = logs.output
         self.assertNotIn("Traceback", err_message)
         self.assertIn("CommandError", err_message)
 
         # If the Exception is CommandError and --traceback is present
         # this command should raise the original CommandError as if it
         # were not a CommandError.
-        err.truncate(0)
-        with self.assertRaises(CommandError):
+        with self.assertRaises(CommandError), self.assertLogs('django.command', 'ERROR'):
             command.run_from_argv(['', '', '--traceback'])
 
     def test_run_from_argv_non_ascii_error(self):
@@ -1685,10 +1682,10 @@ class CommandTypes(AdminScriptTestCase):
         def raise_command_error(*args, **kwargs):
             raise CommandError("Erreur personnalisée")
 
-        command = BaseCommand(stderr=StringIO())
+        command = BaseCommand()
         command.execute = raise_command_error
 
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit), self.assertLogs('django.command'):
             command.run_from_argv(['', ''])
 
     def test_run_from_argv_closes_connections(self):

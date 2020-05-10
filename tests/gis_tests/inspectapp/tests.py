@@ -1,6 +1,5 @@
 import os
 import re
-from io import StringIO
 
 from django.contrib.gis.gdal import GDAL_VERSION, Driver, GDALException
 from django.contrib.gis.utils.ogrinspect import ogrinspect
@@ -13,18 +12,21 @@ from ..test_data import TEST_DATA
 from .models import AllOGRFields
 
 
+def combine_logs(logs):
+    return "\n".join((log.msg for log in logs.records))
+
+
 class InspectDbTests(TestCase):
     def test_geom_columns(self):
         """
         Test the geo-enabled inspectdb command.
         """
-        out = StringIO()
-        call_command(
-            'inspectdb',
-            table_name_filter=lambda tn: tn == 'inspectapp_allogrfields',
-            stdout=out
-        )
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command(
+                'inspectdb',
+                table_name_filter=lambda tn: tn == 'inspectapp_allogrfields',
+            )
+        output = combine_logs(logs)
         if connection.features.supports_geometry_field_introspection:
             self.assertIn('geom = models.PolygonField()', output)
             self.assertIn('point = models.PointField()', output)
@@ -34,13 +36,12 @@ class InspectDbTests(TestCase):
 
     @skipUnlessDBFeature("supports_3d_storage")
     def test_3d_columns(self):
-        out = StringIO()
-        call_command(
-            'inspectdb',
-            table_name_filter=lambda tn: tn == 'inspectapp_fields3d',
-            stdout=out
-        )
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command(
+                'inspectdb',
+                table_name_filter=lambda tn: tn == 'inspectapp_fields3d',
+            )
+        output = combine_logs(logs)
         if connection.features.supports_geometry_field_introspection:
             self.assertIn('point = models.PointField(dim=3)', output)
             if connection.features.supports_geography:
@@ -158,9 +159,9 @@ class OGRInspectTest(SimpleTestCase):
 
     def test_management_command(self):
         shp_file = os.path.join(TEST_DATA, 'cities', 'cities.shp')
-        out = StringIO()
-        call_command('ogrinspect', shp_file, 'City', stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('ogrinspect', shp_file, 'City')
+        output = combine_logs(logs)
         self.assertIn('class City(models.Model):', output)
 
     def test_mapping_option(self):
@@ -177,9 +178,10 @@ class OGRInspectTest(SimpleTestCase):
             "    'geom': 'POINT',\n"
             "}\n" % self.expected_srid)
         shp_file = os.path.join(TEST_DATA, 'cities', 'cities.shp')
-        out = StringIO()
-        call_command('ogrinspect', shp_file, '--mapping', 'City', stdout=out)
-        self.assertIn(expected, out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            call_command('ogrinspect', shp_file, '--mapping', 'City')
+        output = combine_logs(logs)
+        self.assertIn(expected, output)
 
 
 def get_ogr_db_string():

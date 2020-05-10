@@ -1,5 +1,3 @@
-from io import StringIO
-
 from django.core.management import call_command
 from django.test.utils import modify_settings
 
@@ -9,13 +7,12 @@ from . import PostgreSQLTestCase
 @modify_settings(INSTALLED_APPS={'append': 'django.contrib.postgres'})
 class InspectDBTests(PostgreSQLTestCase):
     def assertFieldsInModel(self, model, field_outputs):
-        out = StringIO()
-        call_command(
-            'inspectdb',
-            table_name_filter=lambda tn: tn.startswith(model),
-            stdout=out,
-        )
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command(
+                'inspectdb',
+                table_name_filter=lambda tn: tn.startswith(model),
+            )
+        output = "\n".join((logs.output))
         for field_output in field_outputs:
             self.assertIn(field_output, output)
 

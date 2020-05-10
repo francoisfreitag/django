@@ -1,6 +1,5 @@
 import os
 import re
-from io import StringIO
 from unittest import mock, skipUnless
 
 from django.core.management import call_command
@@ -30,34 +29,39 @@ def special_table_only(table_name):
     return table_name.startswith('inspectdb_special')
 
 
+def combine_logs(logs):
+    return "\n".join((log.msg for log in logs.records))
+
+
 class InspectDBTestCase(TestCase):
     unique_re = re.compile(r'.*unique_together = \((.+),\).*')
 
     def test_stealth_table_name_filter_option(self):
-        out = StringIO()
-        call_command('inspectdb', table_name_filter=inspectdb_tables_only, stdout=out)
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', table_name_filter=inspectdb_tables_only)
+        output = combine_logs(logs)
         error_message = "inspectdb has examined a table that should have been filtered out."
         # contrib.contenttypes is one of the apps always installed when running
         # the Django test suite, check that one of its tables hasn't been
         # inspected
-        self.assertNotIn("class DjangoContentType(models.Model):", out.getvalue(), msg=error_message)
+        self.assertNotIn("class DjangoContentType(models.Model):", output, msg=error_message)
 
     def test_table_option(self):
         """
         inspectdb can inspect a subset of tables by passing the table names as
         arguments.
         """
-        out = StringIO()
-        call_command('inspectdb', 'inspectdb_people', stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', 'inspectdb_people')
+        output = combine_logs(logs)
         self.assertIn('class InspectdbPeople(models.Model):', output)
         self.assertNotIn("InspectdbPeopledata", output)
 
     def make_field_type_asserter(self):
         """Call inspectdb and return a function to validate a field type in its output"""
-        out = StringIO()
-        call_command('inspectdb', 'inspectdb_columntypes', stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', 'inspectdb_columntypes')
+        output = combine_logs(logs)
 
         def assertFieldType(name, definition):
             out_def = re.search(r'^\s*%s = (models.*)$' % name, output, re.MULTILINE)[1]
@@ -104,9 +108,9 @@ class InspectDBTestCase(TestCase):
 
     @skipUnlessDBFeature('can_introspect_json_field', 'supports_json_field')
     def test_json_field(self):
-        out = StringIO()
-        call_command('inspectdb', 'inspectdb_jsonfieldcolumntype', stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', 'inspectdb_jsonfieldcolumntype')
+        output = combine_logs(logs)
         if not connection.features.interprets_empty_strings_as_nulls:
             self.assertIn('json_field = models.JSONField()', output)
         self.assertIn('null_json_field = models.JSONField(blank=True, null=True)', output)
@@ -114,9 +118,9 @@ class InspectDBTestCase(TestCase):
     @skipUnlessDBFeature('supports_collation_on_charfield')
     @skipUnless(test_collation, 'Language collations are not supported.')
     def test_char_field_db_collation(self):
-        out = StringIO()
-        call_command('inspectdb', 'inspectdb_charfielddbcollation', stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', 'inspectdb_charfielddbcollation')
+        output = combine_logs(logs)
         if not connection.features.interprets_empty_strings_as_nulls:
             self.assertIn(
                 "char_field = models.CharField(max_length=10, "
@@ -133,9 +137,9 @@ class InspectDBTestCase(TestCase):
     @skipUnlessDBFeature('supports_collation_on_textfield')
     @skipUnless(test_collation, 'Language collations are not supported.')
     def test_text_field_db_collation(self):
-        out = StringIO()
-        call_command('inspectdb', 'inspectdb_textfielddbcollation', stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', 'inspectdb_textfielddbcollation')
+        output = combine_logs(logs)
         if not connection.features.interprets_empty_strings_as_nulls:
             self.assertIn(
                 "text_field = models.TextField(db_collation='%s')" % test_collation,
@@ -179,9 +183,9 @@ class InspectDBTestCase(TestCase):
 
     @skipUnlessDBFeature('can_introspect_foreign_keys')
     def test_attribute_name_not_python_keyword(self):
-        out = StringIO()
-        call_command('inspectdb', table_name_filter=inspectdb_tables_only, stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', table_name_filter=inspectdb_tables_only)
+        output = combine_logs(logs)
         error_message = "inspectdb generated an attribute name which is a Python keyword"
         # Recursive foreign keys should be set to 'self'
         self.assertIn("parent = models.ForeignKey('self', models.DO_NOTHING)", output)
@@ -207,9 +211,9 @@ class InspectDBTestCase(TestCase):
     def test_digits_column_name_introspection(self):
         """Introspection of column names consist/start with digits (#16536/#17676)"""
         char_field_type = connection.features.introspected_field_types['CharField']
-        out = StringIO()
-        call_command('inspectdb', 'inspectdb_digitsincolumnname', stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', 'inspectdb_digitsincolumnname')
+        output = combine_logs(logs)
         error_message = "inspectdb generated a model field name which is a number"
         self.assertNotIn('    123 = models.%s' % char_field_type, output, msg=error_message)
         self.assertIn('number_123 = models.%s' % char_field_type, output)
@@ -226,9 +230,9 @@ class InspectDBTestCase(TestCase):
         Introspection of column names containing special characters,
         unsuitable for Python identifiers
         """
-        out = StringIO()
-        call_command('inspectdb', table_name_filter=special_table_only, stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', table_name_filter=special_table_only)
+        output = combine_logs(logs)
         base_name = connection.introspection.identifier_converter('Field')
         integer_field_type = connection.features.introspected_field_types['IntegerField']
         self.assertIn("field = models.%s()" % integer_field_type, output)
@@ -243,23 +247,23 @@ class InspectDBTestCase(TestCase):
         Introspection of table names containing special characters,
         unsuitable for Python identifiers
         """
-        out = StringIO()
-        call_command('inspectdb', table_name_filter=special_table_only, stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', table_name_filter=special_table_only)
+        output = combine_logs(logs)
         self.assertIn("class InspectdbSpecialTableName(models.Model):", output)
 
     def test_managed_models(self):
         """By default the command generates models with `Meta.managed = False` (#14305)"""
-        out = StringIO()
-        call_command('inspectdb', 'inspectdb_columntypes', stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', 'inspectdb_columntypes')
+        output = combine_logs(logs)
         self.longMessage = False
         self.assertIn("        managed = False", output, msg='inspectdb should generate unmanaged models.')
 
     def test_unique_together_meta(self):
-        out = StringIO()
-        call_command('inspectdb', 'inspectdb_uniquetogether', stdout=out)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            call_command('inspectdb', 'inspectdb_uniquetogether')
+        output = combine_logs(logs)
         self.assertIn("    unique_together = (('", output)
         unique_together_match = self.unique_re.findall(output)
         # There should be one unique_together tuple.
@@ -282,13 +286,12 @@ class InspectDBTestCase(TestCase):
                 '(id, people_unique_id, COALESCE(message_id, -1))' % PeopleMoreData._meta.db_table
             )
         try:
-            out = StringIO()
-            call_command(
-                'inspectdb',
-                table_name_filter=lambda tn: tn.startswith(PeopleMoreData._meta.db_table),
-                stdout=out,
-            )
-            output = out.getvalue()
+            with self.assertLogs('django.command') as logs:
+                call_command(
+                    'inspectdb',
+                    table_name_filter=lambda tn: tn.startswith(PeopleMoreData._meta.db_table),
+                )
+            output = combine_logs(logs)
             self.assertIn('# A unique constraint could not be introspected.', output)
             self.assertEqual(self.unique_re.findall(output), ["('id', 'people_unique')"])
         finally:
@@ -301,15 +304,15 @@ class InspectDBTestCase(TestCase):
         """
         Introspection of columns with a custom field (#21090)
         """
-        out = StringIO()
         orig_data_types_reverse = connection.introspection.data_types_reverse
         try:
             connection.introspection.data_types_reverse = {
                 'text': 'myfields.TextField',
                 'bigint': 'BigIntegerField',
             }
-            call_command('inspectdb', 'inspectdb_columntypes', stdout=out)
-            output = out.getvalue()
+            with self.assertLogs('django.command') as logs:
+                call_command('inspectdb', 'inspectdb_columntypes')
+            output = combine_logs(logs)
             self.assertIn("text_field = myfields.TextField()", output)
             self.assertIn("big_int_field = models.BigIntegerField()", output)
         finally:
@@ -320,11 +323,11 @@ class InspectDBTestCase(TestCase):
         Introspection errors should not crash the command, and the error should
         be visible in the output.
         """
-        out = StringIO()
         with mock.patch('django.db.connection.introspection.get_table_list',
                         return_value=[TableInfo(name='nonexistent', type='t')]):
-            call_command('inspectdb', stdout=out)
-        output = out.getvalue()
+            with self.assertLogs('django.command') as logs:
+                call_command('inspectdb')
+        output = combine_logs(logs)
         self.assertIn("# Unable to inspect table 'nonexistent'", output)
         # The error message depends on the backend
         self.assertIn("# The error was:", output)
@@ -340,25 +343,21 @@ class InspectDBTransactionalTests(TransactionTestCase):
                 'CREATE VIEW inspectdb_people_view AS '
                 'SELECT id, name FROM inspectdb_people'
             )
-        out = StringIO()
         view_model = 'class InspectdbPeopleView(models.Model):'
         view_managed = 'managed = False  # Created from a view.'
         try:
-            call_command(
-                'inspectdb',
-                table_name_filter=inspectdb_views_only,
-                stdout=out,
-            )
-            no_views_output = out.getvalue()
+            with self.assertLogs('django.command') as logs:
+                call_command('inspectdb', table_name_filter=inspectdb_views_only)
+            no_views_output = combine_logs(logs)
             self.assertNotIn(view_model, no_views_output)
             self.assertNotIn(view_managed, no_views_output)
-            call_command(
-                'inspectdb',
-                table_name_filter=inspectdb_views_only,
-                include_views=True,
-                stdout=out,
-            )
-            with_views_output = out.getvalue()
+            with self.assertLogs('django.command') as logs:
+                call_command(
+                    'inspectdb',
+                    table_name_filter=inspectdb_views_only,
+                    include_views=True,
+                )
+            with_views_output = combine_logs(logs)
             self.assertIn(view_model, with_views_output)
             self.assertIn(view_managed, with_views_output)
         finally:
@@ -373,25 +372,21 @@ class InspectDBTransactionalTests(TransactionTestCase):
                 'CREATE MATERIALIZED VIEW inspectdb_people_materialized AS '
                 'SELECT id, name FROM inspectdb_people'
             )
-        out = StringIO()
         view_model = 'class InspectdbPeopleMaterialized(models.Model):'
         view_managed = 'managed = False  # Created from a view.'
         try:
-            call_command(
-                'inspectdb',
-                table_name_filter=inspectdb_views_only,
-                stdout=out,
-            )
-            no_views_output = out.getvalue()
+            with self.assertLogs('django.command') as logs:
+                call_command('inspectdb', table_name_filter=inspectdb_views_only)
+            no_views_output = combine_logs(logs)
             self.assertNotIn(view_model, no_views_output)
             self.assertNotIn(view_managed, no_views_output)
-            call_command(
-                'inspectdb',
-                table_name_filter=inspectdb_views_only,
-                include_views=True,
-                stdout=out,
-            )
-            with_views_output = out.getvalue()
+            with self.assertLogs('django.command') as logs:
+                call_command(
+                    'inspectdb',
+                    table_name_filter=inspectdb_views_only,
+                    include_views=True,
+                )
+            with_views_output = combine_logs(logs)
             self.assertIn(view_model, with_views_output)
             self.assertIn(view_managed, with_views_output)
         finally:
@@ -412,18 +407,19 @@ class InspectDBTransactionalTests(TransactionTestCase):
                 PARTITION OF inspectdb_partition_parent
                 FOR VALUES IN ('A', 'B', 'C')
             ''')
-        out = StringIO()
         partition_model_parent = 'class InspectdbPartitionParent(models.Model):'
         partition_model_child = 'class InspectdbPartitionChild(models.Model):'
         partition_managed = 'managed = False  # Created from a partition.'
         try:
-            call_command('inspectdb', table_name_filter=inspectdb_tables_only, stdout=out)
-            no_partitions_output = out.getvalue()
+            with self.assertLogs('django.command') as logs:
+                call_command('inspectdb', table_name_filter=inspectdb_tables_only)
+            no_partitions_output = combine_logs(logs)
             self.assertIn(partition_model_parent, no_partitions_output)
             self.assertNotIn(partition_model_child, no_partitions_output)
             self.assertNotIn(partition_managed, no_partitions_output)
-            call_command('inspectdb', table_name_filter=inspectdb_tables_only, include_partitions=True, stdout=out)
-            with_partitions_output = out.getvalue()
+            with self.assertLogs('django.command') as logs:
+                call_command('inspectdb', table_name_filter=inspectdb_tables_only, include_partitions=True)
+            with_partitions_output = combine_logs(logs)
             self.assertIn(partition_model_parent, with_partitions_output)
             self.assertIn(partition_model_child, with_partitions_output)
             self.assertIn(partition_managed, with_partitions_output)
@@ -447,16 +443,15 @@ class InspectDBTransactionalTests(TransactionTestCase):
                     filename %s
                 )
             ''', [os.devnull])
-        out = StringIO()
         foreign_table_model = 'class InspectdbIrisForeignTable(models.Model):'
         foreign_table_managed = 'managed = False'
         try:
-            call_command(
-                'inspectdb',
-                table_name_filter=inspectdb_tables_only,
-                stdout=out,
-            )
-            output = out.getvalue()
+            with self.assertLogs('django.command') as logs:
+                call_command(
+                    'inspectdb',
+                    table_name_filter=inspectdb_tables_only,
+                )
+            output = combine_logs(logs)
             self.assertIn(foreign_table_model, output)
             self.assertIn(foreign_table_managed, output)
         finally:

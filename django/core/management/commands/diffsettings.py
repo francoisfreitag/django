@@ -52,7 +52,7 @@ class Command(BaseCommand):
             'hash': self.output_hash,
             'unified': self.output_unified,
         }[options['output']]
-        return '\n'.join(output_func(user_settings, default_settings, **options))
+        return ('\n'.join(output_func(user_settings, default_settings, **options)),)
 
     def output_hash(self, user_settings, default_settings, **options):
         # Inspired by Postfix's "postconf -n".

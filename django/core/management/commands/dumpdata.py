@@ -1,5 +1,6 @@
 import gzip
 import os
+import sys
 import warnings
 
 from django.apps import apps
@@ -120,7 +121,7 @@ class Command(BaseCommand):
                     try:
                         model = app_config.get_model(model_label)
                     except LookupError:
-                        raise CommandError("Unknown model: %s.%s" % (app_label, model_label))
+                        raise CommandError('Unknown model: %s.%s', logger_args=(app_label, model_label))
 
                     app_list_value = app_list.setdefault(app_config, [])
 
@@ -150,7 +151,7 @@ class Command(BaseCommand):
             except serializers.SerializerDoesNotExist:
                 pass
 
-            raise CommandError("Unknown serialization format: %s" % format)
+            raise CommandError('Unknown serialization format: %s', logger_args=(format,))
 
         def get_objects(count_only=False):
             """
@@ -191,7 +192,6 @@ class Command(BaseCommand):
                         yield from queryset.iterator()
 
         try:
-            self.stdout.ending = None
             object_count = 0
             # If dumpdata is outputting to stdout, there is no way to display progress
             if output and options['verbosity'] > 0:
@@ -231,7 +231,7 @@ class Command(BaseCommand):
                     format, get_objects(), indent=indent,
                     use_natural_foreign_keys=use_natural_foreign_keys,
                     use_natural_primary_keys=use_natural_primary_keys,
-                    stream=stream or self.stdout, progress=True,
+                    stream=stream or sys.stdout, progress=True,
                     object_count=object_count,
                 )
             finally:
@@ -240,4 +240,4 @@ class Command(BaseCommand):
         except Exception as e:
             if show_traceback:
                 raise
-            raise CommandError("Unable to serialize database: %s" % e)
+            raise CommandError('Unable to serialize database: %s', logger_args=(str(e),))

@@ -78,8 +78,11 @@ class NoYamlSerializerTestCase(SimpleTestCase):
 
     def test_dumpdata_pyyaml_error_message(self):
         """Calling dumpdata produces an error when yaml package missing"""
-        with self.assertRaisesMessage(management.CommandError, YAML_IMPORT_ERROR_MESSAGE):
+        with self.assertRaises(management.CommandError) as cm:
             management.call_command('dumpdata', format='yaml')
+        [message] = cm.exception.args
+        self.assertEqual(message, 'Unable to serialize database: %s')
+        self.assertEqual(cm.exception.logger_args, (YAML_IMPORT_ERROR_MESSAGE,))
 
 
 @unittest.skipUnless(HAS_YAML, "No yaml library detected")

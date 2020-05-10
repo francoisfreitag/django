@@ -4,7 +4,6 @@ import sys
 import tempfile
 import unittest
 import warnings
-from io import StringIO
 from unittest import mock
 
 from django.apps import apps
@@ -15,6 +14,7 @@ from django.core.management import CommandError
 from django.core.management.commands.dumpdata import ProxyModelWarning
 from django.db import IntegrityError, connection
 from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
+from django.test.utils import captured_stdout
 
 from .models import (
     Article, Category, CircularA, CircularB, NaturalKeyThing,
@@ -64,21 +64,19 @@ class DumpDataAssertMixin:
     def _dumpdata_assert(self, args, output, format='json', filename=None,
                          natural_foreign_keys=False, natural_primary_keys=False,
                          use_base_manager=False, exclude_list=[], primary_keys=''):
-        new_io = StringIO()
         filename = filename and os.path.join(tempfile.gettempdir(), filename)
-        management.call_command(
-            'dumpdata',
-            *args,
-            format=format,
-            stdout=new_io,
-            stderr=new_io,
-            output=filename,
-            use_natural_foreign_keys=natural_foreign_keys,
-            use_natural_primary_keys=natural_primary_keys,
-            use_base_manager=use_base_manager,
-            exclude=exclude_list,
-            primary_keys=primary_keys,
-        )
+        with captured_stdout() as stdout:
+            management.call_command(
+                'dumpdata',
+                *args,
+                format=format,
+                output=filename,
+                use_natural_foreign_keys=natural_foreign_keys,
+                use_natural_primary_keys=natural_primary_keys,
+                use_base_manager=use_base_manager,
+                exclude=exclude_list,
+                primary_keys=primary_keys,
+            )
         if filename:
             file_root, file_ext = os.path.splitext(filename)
             compression_formats = {
@@ -101,7 +99,7 @@ class DumpDataAssertMixin:
                 command_output = f.read()
             os.remove(file_path)
         else:
-            command_output = new_io.getvalue().strip()
+            command_output = stdout.getvalue().strip()
         if format == "json":
             self.assertJSONEqual(command_output, output)
         elif format == "xml":
@@ -489,11 +487,10 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
     def test_dumpdata_with_uuid_pks(self):
         m1 = PrimaryKeyUUIDModel.objects.create()
         m2 = PrimaryKeyUUIDModel.objects.create()
-        output = StringIO()
-        management.call_command(
-            'dumpdata', 'fixtures.PrimaryKeyUUIDModel', '--pks', ', '.join([str(m1.id), str(m2.id)]),
-            stdout=output,
-        )
+        with captured_stdout() as output:
+            management.call_command(
+                'dumpdata', 'fixtures.PrimaryKeyUUIDModel', '--pks', ', '.join([str(m1.id), str(m2.id)]),
+            )
         result = output.getvalue()
         self.assertIn('"pk": "%s"' % m1.id, result)
         self.assertIn('"pk": "%s"' % m2.id, result)
@@ -575,12 +572,9 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         stdout is a tty, and verbosity > 0.
         """
         management.call_command('loaddata', 'fixture1.json', verbosity=0)
-        new_io = StringIO()
         with NamedTemporaryFile() as file:
             options = {
                 'format': 'json',
-                'stdout': new_io,
-                'stderr': new_io,
                 'output': file.name,
             }
             with self.assertLogs('django.progress') as logs:
@@ -685,9 +679,12 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
 
     def test_ambiguous_compressed_fixture(self):
         # The name "fixture5" is ambiguous, so loading raises an error.
-        msg = "Multiple fixtures named 'fixture5'"
-        with self.assertRaisesMessage(management.CommandError, msg):
+        with self.assertRaises(management.CommandError) as cm:
             management.call_command('loaddata', 'fixture5', verbosity=0)
+        [message] = cm.exception.args
+        self.assertEqual(message, "Multiple fixtures named '%s' in %s. Aborting.")
+        fixture_name, _path = cm.exception.logger_args
+        self.assertEqual(fixture_name, 'fixture5')
 
     def test_db_loading(self):
         # Load db fixtures 1 and 2. These will load using the 'default' database identifier implicitly
@@ -726,8 +723,11 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
             management.call_command('loaddata', 'null_character_in_field_value.json')
 
     def test_loaddata_app_option(self):
-        with self.assertRaisesMessage(CommandError, "No fixture named 'db_fixture_1' found."):
+        with self.assertRaises(CommandError) as cm:
             management.call_command('loaddata', 'db_fixture_1', verbosity=0, app_label="someotherapp")
+        [message] = cm.exception.args
+        self.assertEqual(message, "No fixture named '%s' found.")
+        self.assertEqual(cm.exception.logger_args, ('db_fixture_1',))
         self.assertQuerysetEqual(Article.objects.all(), [])
         management.call_command('loaddata', 'db_fixture_1', verbosity=0, app_label="fixtures")
         self.assertEqual(
@@ -736,13 +736,17 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         )
 
     def test_loaddata_verbosity_three(self):
-        output = StringIO()
-        management.call_command('loaddata', 'fixture1.json', verbosity=3, stdout=output, stderr=output)
-        command_output = output.getvalue()
-        self.assertIn(
-            "\rProcessed 1 object(s).\rProcessed 2 object(s)."
-            "\rProcessed 3 object(s).\rProcessed 4 object(s).\n",
-            command_output
+        with self.assertLogs('django.progress') as progress_logs, self.assertLogs('django.command'):
+            management.call_command('loaddata', 'fixture1.json', verbosity=3)
+        self.assertLogRecords(
+            progress_logs,
+            [
+                ('INFO', '\rProcessed %i object(s).', (1,)),
+                ('INFO', '\rProcessed %i object(s).', (2,)),
+                ('INFO', '\rProcessed %i object(s).', (3,)),
+                ('INFO', '\rProcessed %i object(s).', (4,)),
+                ('INFO', '\n', ()),
+            ],
         )
 
     def test_loading_using(self):
@@ -759,10 +763,16 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
 
     def test_unmatched_identifier_loading(self):
         # Try to load db fixture 3. This won't load because the database identifier doesn't match
-        with self.assertRaisesMessage(CommandError, "No fixture named 'db_fixture_3' found."):
+        with self.assertRaises(CommandError) as cm:
             management.call_command('loaddata', 'db_fixture_3', verbosity=0)
-        with self.assertRaisesMessage(CommandError, "No fixture named 'db_fixture_3' found."):
+        [message] = cm.exception.args
+        self.assertEqual(message, "No fixture named '%s' found.")
+        self.assertEqual(cm.exception.logger_args, ('db_fixture_3',))
+        with self.assertRaises(CommandError) as cm:
             management.call_command('loaddata', 'db_fixture_3', verbosity=0, database='default')
+        [message] = cm.exception.args
+        self.assertEqual(message, "No fixture named '%s' found.")
+        self.assertEqual(cm.exception.logger_args, ('db_fixture_3',))
         self.assertQuerysetEqual(Article.objects.all(), [])
 
     def test_output_formats(self):
@@ -875,9 +885,11 @@ class NonexistentFixtureTests(TestCase):
     """
 
     def test_loaddata_not_existent_fixture_file(self):
-        stdout_output = StringIO()
-        with self.assertRaisesMessage(CommandError, "No fixture named 'this_fixture_doesnt_exist' found."):
-            management.call_command('loaddata', 'this_fixture_doesnt_exist', stdout=stdout_output)
+        with self.assertRaises(CommandError) as cm:
+            management.call_command('loaddata', 'this_fixture_doesnt_exist')
+        [message] = cm.exception.args
+        self.assertEqual(message, "No fixture named '%s' found.")
+        self.assertEqual(cm.exception.logger_args, ('this_fixture_doesnt_exist',))
 
     @mock.patch('django.db.connection.enable_constraint_checking')
     @mock.patch('django.db.connection.disable_constraint_checking')
@@ -887,8 +899,11 @@ class NonexistentFixtureTests(TestCase):
         If no fixtures match the loaddata command, constraints checks on the
         database shouldn't be disabled. This is performance critical on MSSQL.
         """
-        with self.assertRaisesMessage(CommandError, "No fixture named 'this_fixture_doesnt_exist' found."):
+        with self.assertRaises(CommandError) as cm:
             management.call_command('loaddata', 'this_fixture_doesnt_exist', verbosity=0)
+        [message] = cm.exception.args
+        self.assertEqual(message, "No fixture named '%s' found.")
+        self.assertEqual(cm.exception.logger_args, ('this_fixture_doesnt_exist',))
         disable_constraint_checking.assert_not_called()
         enable_constraint_checking.assert_not_called()
 
@@ -911,9 +926,12 @@ class FixtureTransactionTests(DumpDataAssertMixin, TransactionTestCase):
 
         # Try to load fixture 2 using format discovery; this will fail
         # because there are two fixture2's in the fixtures directory
-        msg = "Multiple fixtures named 'fixture2'"
-        with self.assertRaisesMessage(management.CommandError, msg):
+        with self.assertRaises(management.CommandError) as cm:
             management.call_command('loaddata', 'fixture2', verbosity=0)
+        [message] = cm.exception.args
+        self.assertEqual("Multiple fixtures named '%s' in %s. Aborting.", message)
+        fixture_name, _path = cm.exception.logger_args
+        self.assertEqual('fixture2', fixture_name)
 
         # object list is unaffected
         self.assertSequenceEqual(

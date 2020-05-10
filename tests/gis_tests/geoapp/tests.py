@@ -1,5 +1,4 @@
 import tempfile
-from io import StringIO
 
 from django.contrib.gis import gdal
 from django.contrib.gis.db.models import Extent, MakeLine, Union, functions
@@ -11,7 +10,7 @@ from django.core.management import call_command
 from django.db import DatabaseError, NotSupportedError, connection
 from django.db.models import F, OuterRef, Subquery
 from django.test import TestCase, skipUnlessDBFeature
-from django.test.utils import CaptureQueriesContext
+from django.test.utils import CaptureQueriesContext, captured_stdout
 
 from ..utils import skipUnlessGISLookup
 from .models import (
@@ -183,9 +182,9 @@ class GeoModelTest(TestCase):
         """
         Test a dumpdata/loaddata cycle with geographic data.
         """
-        out = StringIO()
         original_data = list(City.objects.all().order_by('name'))
-        call_command('dumpdata', 'geoapp.City', stdout=out)
+        with captured_stdout() as out:
+            call_command('dumpdata', 'geoapp.City')
         result = out.getvalue()
         houston = City.objects.get(name='Houston')
         self.assertIn('"point": "%s"' % houston.point.ewkt, result)

@@ -47,8 +47,11 @@ class FixtureTestCase(TestCase):
         )
 
         # Load a fixture that doesn't exist
-        with self.assertRaisesMessage(CommandError, "No fixture named 'unknown' found."):
+        with self.assertRaises(CommandError) as cm:
             management.call_command("loaddata", "unknown.json", verbosity=0)
+        [message] = cm.exception.args
+        self.assertEqual(message, "No fixture named '%s' found.")
+        self.assertEqual(cm.exception.logger_args, ('unknown',))
 
         self.assertQuerysetEqual(
             Article.objects.all(), [

@@ -2,7 +2,6 @@
 import json
 import os
 import re
-from io import StringIO
 from pathlib import Path
 
 from django.core import management, serializers
@@ -14,6 +13,7 @@ from django.test import (
     TestCase, TransactionTestCase, override_settings, skipIfDBFeature,
     skipUnlessDBFeature,
 )
+from django.test.utils import captured_stdout
 
 from .models import (
     Absolute, Animal, Article, Book, Child, Circle1, Circle2, Circle3,
@@ -183,13 +183,15 @@ class TestFixtures(TestCase):
         Test for ticket #4371 -- Loading data of an unknown format should fail
         Validate that error conditions are caught correctly
         """
-        msg = "Problem installing fixture 'bad_fix.ture1': unkn is not a known serialization format."
-        with self.assertRaisesMessage(management.CommandError, msg):
+        with self.assertRaises(management.CommandError) as cm:
             management.call_command(
                 'loaddata',
                 'bad_fix.ture1.unkn',
                 verbosity=0,
             )
+        [message] = cm.exception.args
+        self.assertEqual(message, "Problem installing fixture '%s': %s is not a known serialization format.")
+        self.assertEqual(cm.exception.logger_args, ('bad_fix.ture1', 'unkn'))
 
     @override_settings(SERIALIZATION_MODULES={'unkn': 'unexistent.path'})
     def test_unimportable_serializer(self):
@@ -345,13 +347,12 @@ class TestFixtures(TestCase):
         )
         animal.save()
 
-        out = StringIO()
-        management.call_command(
-            'dumpdata',
-            'fixtures_regress.animal',
-            format='json',
-            stdout=out,
-        )
+        with captured_stdout() as out:
+            management.call_command(
+                'dumpdata',
+                'fixtures_regress.animal',
+                format='json',
+            )
 
         # Output order isn't guaranteed, so check for parts
         data = out.getvalue()
@@ -384,16 +385,15 @@ class TestFixtures(TestCase):
         """
         Regression for #11428 - Proxy models aren't included when you dumpdata
         """
-        out = StringIO()
         # Create an instance of the concrete class
         widget = Widget.objects.create(name='grommet')
-        management.call_command(
-            'dumpdata',
-            'fixtures_regress.widget',
-            'fixtures_regress.widgetproxy',
-            format='json',
-            stdout=out,
-        )
+        with captured_stdout() as out:
+            management.call_command(
+                'dumpdata',
+                'fixtures_regress.widget',
+                'fixtures_regress.widgetproxy',
+                format='json',
+            )
         self.assertJSONEqual(
             out.getvalue(),
             """[{"pk": %d, "model": "fixtures_regress.widget", "fields": {"name": "grommet"}}]"""
@@ -445,12 +445,17 @@ class TestFixtures(TestCase):
         """
         Regression for #7043 - Error is quickly reported when no fixtures is provided in the command line.
         """
-        msg = "No database fixture specified. Please provide the path of at least one fixture in the command line."
-        with self.assertRaisesMessage(management.CommandError, msg):
+        with self.assertRaises(management.CommandError) as cm:
             management.call_command(
                 'loaddata',
                 verbosity=0,
             )
+        [message] = cm.exception.args
+        self.assertEqual(
+            message,
+            'Error: No database fixture specified. '
+            'Please provide the path of at least one fixture in the command line.',
+        )
 
     def test_ticket_20820(self):
         """
@@ -590,18 +595,17 @@ class NaturalKeyFixtureTests(TestCase):
             verbosity=0,
         )
 
-        out = StringIO()
-        management.call_command(
-            'dumpdata',
-            'fixtures_regress.book',
-            'fixtures_regress.person',
-            'fixtures_regress.store',
-            verbosity=0,
-            format='json',
-            use_natural_foreign_keys=True,
-            use_natural_primary_keys=True,
-            stdout=out,
-        )
+        with captured_stdout() as out:
+            management.call_command(
+                'dumpdata',
+                'fixtures_regress.book',
+                'fixtures_regress.person',
+                'fixtures_regress.store',
+                verbosity=0,
+                format='json',
+                use_natural_foreign_keys=True,
+                use_natural_primary_keys=True,
+            )
         self.assertJSONEqual(
             out.getvalue(),
             """
@@ -829,14 +833,13 @@ class M2MNaturalKeyFixtureTests(TestCase):
         a.b_set.add(b1)
         a.b_set.add(b2)
 
-        out = StringIO()
-        management.call_command(
-            'dumpdata',
-            'fixtures_regress.M2MSimpleA',
-            'fixtures_regress.M2MSimpleB',
-            use_natural_foreign_keys=True,
-            stdout=out,
-        )
+        with captured_stdout() as out:
+            management.call_command(
+                'dumpdata',
+                'fixtures_regress.M2MSimpleA',
+                'fixtures_regress.M2MSimpleB',
+                use_natural_foreign_keys=True,
+            )
 
         for model in [M2MSimpleA, M2MSimpleB]:
             model.objects.all().delete()

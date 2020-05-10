@@ -1,6 +1,5 @@
 import datetime
 import pickle
-from io import StringIO
 from operator import attrgetter
 from unittest.mock import Mock
 
@@ -11,6 +10,7 @@ from django.db import DEFAULT_DB_ALIAS, router, transaction
 from django.db.models import signals
 from django.db.utils import ConnectionRouter
 from django.test import SimpleTestCase, TestCase, override_settings
+from django.test.utils import captured_stdout
 
 from .models import Book, Person, Pet, Review, UserProfile
 from .routers import AuthRouter, TestRouter, WriteRouter
@@ -1565,16 +1565,14 @@ class AuthTestCase(TestCase):
 
         # dumping the default database doesn't try to include auth because
         # allow_migrate prohibits auth on default
-        new_io = StringIO()
-        management.call_command('dumpdata', 'auth', format='json', database='default', stdout=new_io)
-        command_output = new_io.getvalue().strip()
-        self.assertEqual(command_output, '[]')
+        with captured_stdout() as stdout:
+            management.call_command('dumpdata', 'auth', format='json', database='default')
+        self.assertEqual('[]', stdout.getvalue())
 
         # dumping the other database does include auth
-        new_io = StringIO()
-        management.call_command('dumpdata', 'auth', format='json', database='other', stdout=new_io)
-        command_output = new_io.getvalue().strip()
-        self.assertIn('"email": "alice@example.com"', command_output)
+        with captured_stdout() as stdout:
+            management.call_command('dumpdata', 'auth', format='json', database='other')
+        self.assertIn('"email": "alice@example.com"', stdout.getvalue())
 
 
 class AntiPetRouter:
@@ -1621,11 +1619,13 @@ class FixtureTestCase(TestCase):
         A fixture can contain entries, but lead to nothing in the database;
         this shouldn't raise an error (#14068).
         """
-        new_io = StringIO()
-        management.call_command('loaddata', 'pets', stdout=new_io, stderr=new_io)
-        command_output = new_io.getvalue().strip()
+        with self.assertLogs('django.command') as logs:
+            management.call_command('loaddata', 'pets')
         # No objects will actually be loaded
-        self.assertEqual(command_output, "Installed 0 object(s) (of 2) from 1 fixture(s)")
+        self.assertLogRecords(
+            logs,
+            [('INFO', "Installed %d object(s) (of %d) from %d fixture(s)", (0, 2, 1))],
+        )
 
 
 class PickleQuerySetTestCase(TestCase):

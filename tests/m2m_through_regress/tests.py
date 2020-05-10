@@ -1,8 +1,7 @@
-from io import StringIO
-
 from django.contrib.auth.models import User
 from django.core import management
 from django.test import TestCase
+from django.test.utils import captured_stdout
 
 from .models import (
     Car, CarDriver, Driver, Group, Membership, Person, UserMembership,
@@ -71,8 +70,8 @@ class M2MThroughSerializationTestCase(TestCase):
         "m2m-through models aren't serialized as m2m fields. Refs #8134"
         pks = {"p_pk": self.bob.pk, "g_pk": self.roll.pk, "m_pk": self.bob_roll.pk}
 
-        out = StringIO()
-        management.call_command("dumpdata", "m2m_through_regress", format="json", stdout=out)
+        with captured_stdout() as out:
+            management.call_command("dumpdata", "m2m_through_regress", format="json")
         self.assertJSONEqual(
             out.getvalue().strip(),
             '[{"pk": %(m_pk)s, "model": "m2m_through_regress.membership", "fields": {"person": %(p_pk)s, "price": '
@@ -81,8 +80,8 @@ class M2MThroughSerializationTestCase(TestCase):
             % pks
         )
 
-        out = StringIO()
-        management.call_command("dumpdata", "m2m_through_regress", format="xml", indent=2, stdout=out)
+        with captured_stdout() as out:
+            management.call_command("dumpdata", "m2m_through_regress", format="xml", indent=2)
         self.assertXMLEqual(out.getvalue().strip(), """
 <?xml version="1.0" encoding="utf-8"?>
 <django-objects version="1.0">
@@ -207,8 +206,8 @@ class ThroughLoadDataTestCase(TestCase):
         Sequences on an m2m_through are created for the through model, not a
         phantom auto-generated m2m table (#11107).
         """
-        out = StringIO()
-        management.call_command("dumpdata", "m2m_through_regress", format="json", stdout=out)
+        with captured_stdout() as out:
+            management.call_command("dumpdata", "m2m_through_regress", format="json")
         self.assertJSONEqual(
             out.getvalue().strip(),
             '[{"pk": 1, "model": "m2m_through_regress.usermembership", "fields": {"price": 100, "group": 1, "user"'

@@ -1,7 +1,6 @@
 # Unit tests for cache framework
 # Uses whatever cache backend is set in the test settings file.
 import copy
-import io
 import os
 import pickle
 import re
@@ -1120,9 +1119,14 @@ class DBCacheTests(BaseCacheTests, TransactionTestCase):
         self._perform_cull_test('zero_cull', 50, 18)
 
     def test_second_call_doesnt_crash(self):
-        out = io.StringIO()
-        management.call_command('createcachetable', stdout=out)
-        self.assertEqual(out.getvalue(), "Cache table 'test cache table' already exists.\n" * len(settings.CACHES))
+        with self.assertLogs('django.command') as logs:
+            management.call_command('createcachetable', verbosity=2)
+        self.assertLogRecords(
+            logs,
+            [
+                ('INFO', "Cache table '%s' already exists.", ('test cache table',)),
+            ] * len(settings.CACHES)
+        )
 
     @override_settings(CACHES=caches_setting_for_tests(
         BACKEND='django.core.cache.backends.db.DatabaseCache',
@@ -1130,10 +1134,10 @@ class DBCacheTests(BaseCacheTests, TransactionTestCase):
         LOCATION='createcachetable_dry_run_mode'
     ))
     def test_createcachetable_dry_run_mode(self):
-        out = io.StringIO()
-        management.call_command('createcachetable', dry_run=True, stdout=out)
-        output = out.getvalue()
-        self.assertTrue(output.startswith("CREATE TABLE"))
+        with self.assertLogs('django.command') as logs:
+            management.call_command('createcachetable', dry_run=True)
+        first_line = logs.records[0].msg
+        self.assertTrue(first_line.startswith('CREATE TABLE'))
 
     def test_createcachetable_with_table_argument(self):
         """
@@ -1141,14 +1145,9 @@ class DBCacheTests(BaseCacheTests, TransactionTestCase):
         specifying the table name).
         """
         self.drop_table()
-        out = io.StringIO()
-        management.call_command(
-            'createcachetable',
-            'test cache table',
-            verbosity=2,
-            stdout=out,
-        )
-        self.assertEqual(out.getvalue(), "Cache table 'test cache table' created.\n")
+        with self.assertLogs('django.command') as logs:
+            management.call_command('createcachetable', 'test cache table', verbosity=2)
+        self.assertLogRecords(logs, [('INFO', "Cache table '%s' created.", ('test cache table',))])
 
 
 @override_settings(USE_TZ=True)

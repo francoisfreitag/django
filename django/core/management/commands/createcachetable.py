@@ -50,7 +50,7 @@ class Command(BaseCommand):
 
         if tablename in connection.introspection.table_names():
             if self.verbosity > 0:
-                self.stdout.write("Cache table '%s' already exists." % tablename)
+                self.logger.info("Cache table '%s' already exists.", tablename)
             return
 
         fields = (
@@ -87,9 +87,9 @@ class Command(BaseCommand):
         full_statement = "\n".join(full_statement)
 
         if dry_run:
-            self.stdout.write(full_statement)
+            self.logger.info(full_statement)
             for statement in index_output:
-                self.stdout.write(statement)
+                self.logger.info(statement)
             return
 
         with transaction.atomic(using=database, savepoint=connection.features.can_rollback_ddl):
@@ -98,10 +98,10 @@ class Command(BaseCommand):
                     curs.execute(full_statement)
                 except DatabaseError as e:
                     raise CommandError(
-                        "Cache table '%s' could not be created.\nThe error was: %s." %
-                        (tablename, e))
+                        "Cache table '%s' could not be created.\nThe error was: %s.",
+                        logger_args=(tablename, e))
                 for statement in index_output:
                     curs.execute(statement)
 
         if self.verbosity > 1:
-            self.stdout.write("Cache table '%s' created." % tablename)
+            self.logger.info("Cache table '%s' created.", tablename)

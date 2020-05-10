@@ -212,8 +212,8 @@ class BaseCommand:
        SQL statements, will be wrapped in ``BEGIN`` and ``COMMIT``.
 
     4. If ``handle()`` or ``execute()`` raised any exception (e.g.
-       ``CommandError``), ``run_from_argv()`` will dispatch the error
-       to the corresponding logger.
+       ``CommandError``), ``run_from_argv()`` will log the error using
+       the command logger.
 
     Thus, the ``handle()`` method is typically the starting point for
     subclasses; many built-in commands and command types either place
@@ -450,8 +450,8 @@ class BaseCommand:
         """
         Use the system check framework to validate entire Django project.
         Raise CommandError for any serious message (error or critical errors).
-        If there are only light messages (like warnings), print them to stderr
-        and don't raise an exception.
+        If there are only light messages (like warnings), log them and don't
+        raise an exception.
         """
         all_issues = checks.run_checks(
             app_configs=app_configs,
@@ -509,13 +509,13 @@ class BaseCommand:
 
         if msg:
             if visible_issue_count:
-                self.logger.error(msg)
+                self.logger.warning(msg)
             else:
                 self.logger.info(msg)
 
     def check_migrations(self):
         """
-        Print a warning if the set of migrations on disk don't match the
+        Emit a warning if the set of migrations on disk don't match the
         migrations in the database.
         """
         from django.db.migrations.executor import MigrationExecutor

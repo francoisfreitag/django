@@ -32,6 +32,7 @@ from django.test import (
     LiveServerTestCase, SimpleTestCase, TestCase, override_settings,
 )
 from django.test.utils import captured_stderr, captured_stdout
+from django.utils.deprecation import RemovedInDjango40Warning
 
 custom_templates_dir = os.path.join(os.path.dirname(__file__), 'custom_templates')
 
@@ -1555,13 +1556,17 @@ class CommandTypes(AdminScriptTestCase):
             def handle(self, *args, **options):
                 self.stdout.write("Hello, World!")
 
+        msg = "The 'stdout' and 'stderr' attributes are deprecated.\nUse the new 'logger' attribute instead."
         out = StringIO()
-        command = Command(stdout=out)
-        call_command(command)
+        with self.assertWarnsMessage(RemovedInDjango40Warning, msg):
+            command = Command(stdout=out)
+        with self.assertWarnsMessage(RemovedInDjango40Warning, msg):
+            call_command(command)
         self.assertEqual(out.getvalue(), "Hello, World!\n")
         out.truncate(0)
         new_out = StringIO()
-        call_command(command, stdout=new_out)
+        with self.assertWarnsMessage(RemovedInDjango40Warning, msg):
+            call_command(command, stdout=new_out)
         self.assertEqual(out.getvalue(), "")
         self.assertEqual(new_out.getvalue(), "Hello, World!\n")
 
@@ -1572,13 +1577,17 @@ class CommandTypes(AdminScriptTestCase):
             def handle(self, *args, **options):
                 self.stderr.write("Hello, World!")
 
+        msg = "The 'stdout' and 'stderr' attributes are deprecated.\nUse the new 'logger' attribute instead."
         err = StringIO()
-        command = Command(stderr=err)
-        call_command(command)
+        with self.assertWarnsMessage(RemovedInDjango40Warning, msg):
+            command = Command(stderr=err)
+        with self.assertWarnsMessage(RemovedInDjango40Warning, msg):
+            call_command(command)
         self.assertEqual(err.getvalue(), "Hello, World!\n")
         err.truncate(0)
         new_err = StringIO()
-        call_command(command, stderr=new_err)
+        with self.assertWarnsMessage(RemovedInDjango40Warning, msg):
+            call_command(command, stderr=new_err)
         self.assertEqual(err.getvalue(), "")
         self.assertEqual(new_err.getvalue(), "Hello, World!\n")
 

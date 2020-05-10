@@ -441,7 +441,14 @@ class SettingsConfigTest(AdminScriptTestCase):
         'custom_handler': {
             'level': 'INFO',
             'class': 'logging_tests.logconfig.MyHandler',
+        },
+        'command_stdout': {
+            'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stdout',
         }
+    },
+    'loggers': {
+        'django.command': {'handlers': ['command_stdout']},
     }
 }"""
         self.write_settings('settings.py', sdict={'LOGGING': log_config})
@@ -517,12 +524,15 @@ class SettingsCustomLoggingTest(AdminScriptTestCase):
         super().setUp()
         logging_conf = """
 [loggers]
-keys=root
+keys=root,django_command
 [handlers]
 keys=stream
 [formatters]
 keys=simple
 [logger_root]
+handlers=stream
+[logger_django_command]
+qualname=django.command
 handlers=stream
 [handler_stream]
 class=StreamHandler

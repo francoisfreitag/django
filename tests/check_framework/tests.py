@@ -1,6 +1,3 @@
-import sys
-from io import StringIO
-
 from django.apps import apps
 from django.core import checks
 from django.core.checks import Error, Warning
@@ -159,21 +156,18 @@ class CheckCommandTests(SimpleTestCase):
     def setUp(self):
         simple_system_check.kwargs = None
         tagged_system_check.kwargs = None
-        self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
-        sys.stdout, sys.stderr = StringIO(), StringIO()
-
-    def tearDown(self):
-        sys.stdout, sys.stderr = self.old_stdout, self.old_stderr
 
     @override_system_checks([simple_system_check, tagged_system_check])
     def test_simple_call(self):
-        call_command('check')
+        with self.assertLogs('django.command'):
+            call_command('check')
         self.assertEqual(simple_system_check.kwargs, {'app_configs': None, 'databases': None})
         self.assertEqual(tagged_system_check.kwargs, {'app_configs': None, 'databases': None})
 
     @override_system_checks([simple_system_check, tagged_system_check])
     def test_given_app(self):
-        call_command('check', 'auth', 'admin')
+        with self.assertLogs('django.command'):
+            call_command('check', 'auth', 'admin')
         auth_config = apps.get_app_config('auth')
         admin_config = apps.get_app_config('admin')
         self.assertEqual(simple_system_check.kwargs, {'app_configs': [auth_config, admin_config], 'databases': None})
@@ -181,46 +175,62 @@ class CheckCommandTests(SimpleTestCase):
 
     @override_system_checks([simple_system_check, tagged_system_check])
     def test_given_tag(self):
-        call_command('check', tags=['simpletag'])
+        with self.assertLogs('django.command'):
+            call_command('check', tags=['simpletag'])
         self.assertIsNone(simple_system_check.kwargs)
         self.assertEqual(tagged_system_check.kwargs, {'app_configs': None, 'databases': None})
 
     @override_system_checks([simple_system_check, tagged_system_check])
     def test_invalid_tag(self):
-        msg = 'There is no system check with the "missingtag" tag.'
-        with self.assertRaisesMessage(CommandError, msg):
+        with self.assertRaises(CommandError) as cm:
             call_command('check', tags=['missingtag'])
+        [message] = cm.exception.args
+        self.assertEqual(message, 'There is no system check with the "%s" tag.')
+        self.assertEqual(cm.exception.logger_args, ('missingtag',))
 
     @override_system_checks([simple_system_check])
     def test_list_tags_empty(self):
-        call_command('check', list_tags=True)
-        self.assertEqual('\n', sys.stdout.getvalue())
+        with self.assertLogs('django.command') as logs:
+            call_command('check', list_tags=True)
+        self.assertLogRecords(logs, [('INFO', '', ())])
 
     @override_system_checks([tagged_system_check])
     def test_list_tags(self):
-        call_command('check', list_tags=True)
-        self.assertEqual('simpletag\n', sys.stdout.getvalue())
+        with self.assertLogs('django.command') as logs:
+            call_command('check', list_tags=True)
+        self.assertLogRecords(logs, [('INFO', 'simpletag', ())])
 
     @override_system_checks([tagged_system_check], deployment_checks=[deployment_system_check])
     def test_list_deployment_check_omitted(self):
-        call_command('check', list_tags=True)
-        self.assertEqual('simpletag\n', sys.stdout.getvalue())
+        with self.assertLogs('django.command') as logs:
+            call_command('check', list_tags=True)
+        self.assertLogRecords(logs, [('INFO', 'simpletag', ())])
 
     @override_system_checks([tagged_system_check], deployment_checks=[deployment_system_check])
     def test_list_deployment_check_included(self):
-        call_command('check', deploy=True, list_tags=True)
-        self.assertEqual('deploymenttag\nsimpletag\n', sys.stdout.getvalue())
+        with self.assertLogs('django.command') as logs:
+            call_command('check', deploy=True, list_tags=True)
+        self.assertLogRecords(logs, [('INFO', 'deploymenttag\nsimpletag', ())])
 
     @override_system_checks([tagged_system_check], deployment_checks=[deployment_system_check])
     def test_tags_deployment_check_omitted(self):
-        msg = 'There is no system check with the "deploymenttag" tag.'
-        with self.assertRaisesMessage(CommandError, msg):
+        with self.assertRaises(CommandError) as cm:
             call_command('check', tags=['deploymenttag'])
+        [message] = cm.exception.args
+        self.assertEqual(message, 'There is no system check with the "%s" tag.')
+        self.assertEqual(cm.exception.logger_args, ("deploymenttag",))
 
     @override_system_checks([tagged_system_check], deployment_checks=[deployment_system_check])
     def test_tags_deployment_check_included(self):
-        call_command('check', deploy=True, tags=['deploymenttag'])
-        self.assertIn('Deployment Check', sys.stderr.getvalue())
+        with self.assertLogs('django.command') as logs:
+            call_command('check', deploy=True, tags=['deploymenttag'])
+        msg = (
+            'System check identified some issues:\n\n'
+            'WARNINGS:\n'
+            '\x1b[33;1m?: Deployment Check\x1b[0m\n\n'
+            'System check identified 1 issue (0 silenced).'
+        )
+        self.assertLogRecords(logs, [('WARNING', msg, ())])
 
     @override_system_checks([tagged_system_check])
     def test_fail_level(self):
@@ -238,31 +248,19 @@ def custom_warning_system_check(app_configs, **kwargs):
 
 class SilencingCheckTests(SimpleTestCase):
 
-    def setUp(self):
-        self.old_stdout, self.old_stderr = sys.stdout, sys.stderr
-        self.stdout, self.stderr = StringIO(), StringIO()
-        sys.stdout, sys.stderr = self.stdout, self.stderr
-
-    def tearDown(self):
-        sys.stdout, sys.stderr = self.old_stdout, self.old_stderr
-
     @override_settings(SILENCED_SYSTEM_CHECKS=['myerrorcheck.E001'])
     @override_system_checks([custom_error_system_check])
     def test_silenced_error(self):
-        out = StringIO()
-        err = StringIO()
-        call_command('check', stdout=out, stderr=err)
-        self.assertEqual(out.getvalue(), 'System check identified no issues (1 silenced).\n')
-        self.assertEqual(err.getvalue(), '')
+        with self.assertLogs('django.command') as logs:
+            call_command('check')
+        self.assertLogRecords(logs, [('INFO', 'System check identified no issues (1 silenced).', ())])
 
     @override_settings(SILENCED_SYSTEM_CHECKS=['mywarningcheck.E001'])
     @override_system_checks([custom_warning_system_check])
     def test_silenced_warning(self):
-        out = StringIO()
-        err = StringIO()
-        call_command('check', stdout=out, stderr=err)
-        self.assertEqual(out.getvalue(), 'System check identified no issues (1 silenced).\n')
-        self.assertEqual(err.getvalue(), '')
+        with self.assertLogs('django.command') as logs:
+            call_command('check')
+        self.assertLogRecords(logs, [('INFO', 'System check identified no issues (1 silenced).', ())])
 
 
 class CheckFrameworkReservedNamesTests(SimpleTestCase):

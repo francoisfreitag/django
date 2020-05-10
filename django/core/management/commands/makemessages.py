@@ -308,8 +308,9 @@ class Command(BaseCommand):
         if options['add_location']:
             if self.gettext_version < (0, 19):
                 raise CommandError(
-                    "The --add-location option requires gettext 0.19 or later. "
-                    "You have %s." % '.'.join(str(x) for x in self.gettext_version)
+                    'The --add-location option requires gettext 0.19 or later. '
+                    'You have %s.',
+                    logger_args=('.'.join(str(x) for x in self.gettext_version),)
                 )
             arg_add_location = "--add-location=%s" % options['add_location']
             self.msgmerge_options = self.msgmerge_options[:] + [arg_add_location]
@@ -331,14 +332,14 @@ class Command(BaseCommand):
 
         if (not locale and not exclude and not process_all) or self.domain is None:
             raise CommandError(
-                "Type '%s help %s' for usage information."
-                % (os.path.basename(sys.argv[0]), sys.argv[1])
+                "Type '%s help %s' for usage information.",
+                logger_args=(os.path.basename(sys.argv[0]), sys.argv[1])
             )
 
         if self.verbosity > 1:
-            self.stdout.write(
-                'examining files with the extensions: %s'
-                % get_text_list(list(self.extensions), 'and')
+            self.logger.info(
+                'examining files with the extensions: %s',
+                get_text_list(list(self.extensions), 'and')
             )
 
         self.invoked_for_django = False
@@ -384,15 +385,14 @@ class Command(BaseCommand):
             # Build po files for each selected locale
             for locale in locales:
                 if '-' in locale:
-                    self.stdout.write(
-                        'invalid locale %s, did you mean %s?' % (
-                            locale,
-                            locale.replace('-', '_'),
-                        ),
+                    self.logger.info(
+                        'invalid locale %s, did you mean %s?',
+                        locale,
+                        locale.replace('-', '_'),
                     )
                     continue
                 if self.verbosity > 0:
-                    self.stdout.write('processing locale %s' % locale)
+                    self.logger.info('processing locale %s', locale)
                 for potfile in potfiles:
                     self.write_po_file(potfile, locale)
         finally:
@@ -419,7 +419,7 @@ class Command(BaseCommand):
             settings.LOCALE_PATHS
         except ImproperlyConfigured:
             if self.verbosity > 1:
-                self.stderr.write("Running without configured settings.")
+                self.logger.warning('Running without configured settings.')
             return False
         return True
 
@@ -440,9 +440,9 @@ class Command(BaseCommand):
             if errors:
                 if status != STATUS_OK:
                     raise CommandError(
-                        "errors happened while running msguniq\n%s" % errors)
+                        'errors happened while running msguniq\n%s', logger_args=(errors,))
                 elif self.verbosity > 0:
-                    self.stdout.write(errors)
+                    self.logger.warning(errors)
             msgs = normalize_eols(msgs)
             with open(potfile, 'w', encoding='utf-8') as fp:
                 fp.write(msgs)
@@ -470,7 +470,7 @@ class Command(BaseCommand):
                         os.path.join(os.path.abspath(dirpath), dirname) in ignored_roots):
                     dirnames.remove(dirname)
                     if self.verbosity > 1:
-                        self.stdout.write('ignoring directory %s' % dirname)
+                        self.logger.info('ignoring directory %s', dirname)
                 elif dirname == 'locale':
                     dirnames.remove(dirname)
                     self.locale_paths.insert(0, os.path.join(os.path.abspath(dirpath), dirname))
@@ -479,7 +479,7 @@ class Command(BaseCommand):
                 file_ext = os.path.splitext(filename)[1]
                 if file_ext not in self.extensions or is_ignored_path(file_path, self.ignore_patterns):
                     if self.verbosity > 1:
-                        self.stdout.write('ignoring file %s in %s' % (filename, dirpath))
+                        self.logger.info('ignoring file %s in %s', filename, dirpath)
                 else:
                     locale_dir = None
                     for path in self.locale_paths:
@@ -512,19 +512,19 @@ class Command(BaseCommand):
         build_files = []
         for translatable in files:
             if self.verbosity > 1:
-                self.stdout.write('processing file %s in %s' % (
-                    translatable.file, translatable.dirpath
-                ))
+                self.logger.info(
+                    'processing file %s in %s\n',
+                    translatable.file, translatable.dirpath,
+                )
             if self.domain not in ('djangojs', 'django'):
                 continue
             build_file = self.build_file_class(self, self.domain, translatable)
             try:
                 build_file.preprocess()
             except UnicodeDecodeError as e:
-                self.stdout.write(
-                    'UnicodeDecodeError: skipped file %s in %s (reason: %s)' % (
-                        translatable.file, translatable.dirpath, e,
-                    )
+                self.logger.warning(
+                    'UnicodeDecodeError: skipped file %s in %s (reason: %s)',
+                    translatable.file, translatable.dirpath, str(e),
                 )
                 continue
             build_files.append(build_file)
@@ -575,12 +575,11 @@ class Command(BaseCommand):
                 for build_file in build_files:
                     build_file.cleanup()
                 raise CommandError(
-                    'errors happened while running xgettext on %s\n%s' %
-                    ('\n'.join(input_files), errors)
+                    'errors happened while running xgettext on %s\n%s',
+                    logger_args=('\n'.join(input_files), errors)
                 )
             elif self.verbosity > 0:
-                # Print warnings
-                self.stdout.write(errors)
+                self.logger.warning(errors)
 
         if msgs:
             if locale_dir is NO_LOCALE_DIR:
@@ -614,9 +613,9 @@ class Command(BaseCommand):
             if errors:
                 if status != STATUS_OK:
                     raise CommandError(
-                        "errors happened while running msgmerge\n%s" % errors)
+                        'errors happened while running msgmerge\n%s', logger_args=(errors,))
                 elif self.verbosity > 0:
-                    self.stdout.write(errors)
+                    self.logger.warning(errors)
         else:
             with open(potfile, encoding='utf-8') as fp:
                 msgs = fp.read()
@@ -634,9 +633,9 @@ class Command(BaseCommand):
             if errors:
                 if status != STATUS_OK:
                     raise CommandError(
-                        "errors happened while running msgattrib\n%s" % errors)
+                        'errors happened while running msgattrib\n%s', logger_args=(errors,))
                 elif self.verbosity > 0:
-                    self.stdout.write(errors)
+                    self.logger.warning(errors)
 
     def copy_plural_forms(self, msgs, locale):
         """
@@ -657,7 +656,7 @@ class Command(BaseCommand):
                 if m:
                     plural_form_line = m['value']
                     if self.verbosity > 1:
-                        self.stdout.write('copying plural forms: %s' % plural_form_line)
+                        self.logger.info('copying plural forms: %s', plural_form_line)
                     lines = []
                     found = False
                     for line in msgs.splitlines():

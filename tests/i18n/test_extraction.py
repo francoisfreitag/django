@@ -4,7 +4,6 @@ import shutil
 import tempfile
 import time
 import warnings
-from io import StringIO
 from pathlib import Path
 from unittest import mock, skipIf, skipUnless
 
@@ -38,13 +37,12 @@ class ExtractorTests(POFileAssertionMixin, RunInTmpDirMixin, SimpleTestCase):
     PO_FILE = 'locale/%s/LC_MESSAGES/django.po' % LOCALE
 
     def _run_makemessages(self, **options):
-        out = StringIO()
-        management.call_command('makemessages', locale=[LOCALE], verbosity=2, stdout=out, **options)
-        output = out.getvalue()
+        with self.assertLogs('django.command') as logs:
+            management.call_command('makemessages', locale=[LOCALE], verbosity=2, **options)
         self.assertTrue(os.path.exists(self.PO_FILE))
         with open(self.PO_FILE) as fp:
             po_contents = fp.read()
-        return output, po_contents
+        return logs, po_contents
 
     def assertMsgIdPlural(self, msgid, haystack, use_quotes=True):
         return self._assertPoKeyword('msgid_plural', msgid, haystack, use_quotes=use_quotes)
@@ -144,26 +142,33 @@ class BasicExtractorTests(ExtractorTests):
 
     def test_no_option(self):
         # One of either the --locale, --exclude, or --all options is required.
-        msg = "Type 'manage.py help makemessages' for usage information."
         with mock.patch(
             'django.core.management.commands.makemessages.sys.argv',
             ['manage.py', 'makemessages'],
         ):
-            with self.assertRaisesRegex(CommandError, msg):
+            with self.assertRaises(CommandError) as cm:
                 management.call_command('makemessages')
+        [message] = cm.exception.args
+        self.assertEqual(message, "Type '%s help %s' for usage information.")
+        self.assertEqual(cm.exception.logger_args, ('manage.py', 'makemessages'))
 
     def test_valid_locale(self):
-        out = StringIO()
-        management.call_command('makemessages', locale=['de'], stdout=out, verbosity=1)
-        self.assertNotIn('invalid locale de', out.getvalue())
-        self.assertIn('processing locale de', out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('makemessages', locale=['de'], verbosity=1)
+        self.assertLogRecords(logs, [('INFO', 'processing locale %s', ('de',))])
         self.assertIs(Path(self.PO_FILE).exists(), True)
 
     def test_invalid_locale(self):
-        out = StringIO()
-        management.call_command('makemessages', locale=['pl-PL'], stdout=out, verbosity=1)
-        self.assertIn('invalid locale pl-PL, did you mean pl_PL?', out.getvalue())
-        self.assertNotIn('processing locale pl-PL', out.getvalue())
+        with self.assertLogs('django.command') as logs:
+            management.call_command('makemessages', locale=['pl-PL'], verbosity=1)
+        self.assertLogRecords(
+            logs,
+            [(
+                'INFO',
+                'invalid locale %s, did you mean %s?',
+                ('pl-PL', 'pl_PL'),
+            )],
+        )
         self.assertIs(Path('locale/pl-PL/LC_MESSAGES/django.po').exists(), False)
 
     def test_comments_extractor(self):
@@ -231,9 +236,18 @@ class BasicExtractorTests(ExtractorTests):
 
     def test_unicode_decode_error(self):
         shutil.copyfile('./not_utf8.sample', './not_utf8.txt')
-        out = StringIO()
-        management.call_command('makemessages', locale=[LOCALE], stdout=out)
-        self.assertIn("UnicodeDecodeError: skipped file not_utf8.txt in .", out.getvalue())
+        with self.assertLogs('django.command', 'WARNING') as logs:
+            management.call_command('makemessages', locale=[LOCALE])
+        self.assertLogRecords(
+            logs,
+            [
+                ("WARNING",
+                 "UnicodeDecodeError: skipped file %s in %s (reason: %s)",
+                 ('not_utf8.txt',
+                  '.',
+                  "'utf-8' codec can't decode byte 0xd8 in position 19: invalid continuation byte")),
+            ],
+        )
 
     def test_unicode_file_name(self):
         open(os.path.join(self.test_dir, 'vidéo.txt'), 'a').close()
@@ -242,9 +256,9 @@ class BasicExtractorTests(ExtractorTests):
     def test_extraction_warning(self):
         """test xgettext warning about multiple bare interpolation placeholders"""
         shutil.copyfile('./code.sample', './code_sample.py')
-        out = StringIO()
-        management.call_command('makemessages', locale=[LOCALE], stdout=out)
-        self.assertIn("code_sample.py:4", out.getvalue())
+        with self.assertLogs('django.command', 'WARNING') as logs:
+            management.call_command('makemessages', locale=[LOCALE])
+        self.assertIn("code_sample.py:4", "\n".join(logs.output))
 
     def test_template_message_context_extractor(self):
         """
@@ -484,35 +498,40 @@ class JavascriptExtractorTests(ExtractorTests):
         self.assertMsgId("Static content inside app should be included.", po_contents)
 
 
+def combine_logs(logs):
+    return "\n".join(logs.output)
+
+
 class IgnoredExtractorTests(ExtractorTests):
 
     def test_ignore_directory(self):
-        out, po_contents = self._run_makemessages(ignore_patterns=[
+        logs, po_contents = self._run_makemessages(ignore_patterns=[
             os.path.join('ignore_dir', '*'),
         ])
-        self.assertIn("ignoring directory ignore_dir", out)
+        self.assertIn("ignoring directory ignore_dir", combine_logs(logs))
         self.assertMsgId('This literal should be included.', po_contents)
         self.assertNotMsgId('This should be ignored.', po_contents)
 
     def test_ignore_subdirectory(self):
-        out, po_contents = self._run_makemessages(ignore_patterns=[
+        logs, po_contents = self._run_makemessages(ignore_patterns=[
             'templates/*/ignore.html',
             'templates/subdir/*',
         ])
-        self.assertIn("ignoring directory subdir", out)
+        self.assertIn("ignoring directory subdir", combine_logs(logs))
         self.assertNotMsgId('This subdir should be ignored too.', po_contents)
 
     def test_ignore_file_patterns(self):
-        out, po_contents = self._run_makemessages(ignore_patterns=[
+        logs, po_contents = self._run_makemessages(ignore_patterns=[
             'xxx_*',
         ])
-        self.assertIn("ignoring file xxx_ignored.html", out)
+        self.assertIn("ignoring file xxx_ignored.html", combine_logs(logs))
         self.assertNotMsgId('This should be ignored too.', po_contents)
 
     def test_media_static_dirs_ignored(self):
         with override_settings(STATIC_ROOT=os.path.join(self.test_dir, 'static/'),
                                MEDIA_ROOT=os.path.join(self.test_dir, 'media_root/')):
-            out, _ = self._run_makemessages()
+            logs, _ = self._run_makemessages()
+            out = combine_logs(logs)
             self.assertIn("ignoring directory static", out)
             self.assertIn("ignoring directory media_root", out)
 
@@ -656,9 +675,11 @@ class LocationCommentsTests(ExtractorTests):
         CommandError is raised when using makemessages --add-location with
         gettext < 0.19.
         """
-        msg = "The --add-location option requires gettext 0.19 or later. You have 0.18.99."
-        with self.assertRaisesMessage(CommandError, msg):
+        with self.assertRaises(CommandError) as cm:
             management.call_command('makemessages', locale=[LOCALE], verbosity=0, add_location='full')
+        [message] = cm.exception.args
+        self.assertEqual(message, "The --add-location option requires gettext 0.19 or later. You have %s.")
+        self.assertEqual(cm.exception.logger_args, ("0.18.99",))
 
 
 class KeepPotFileExtractorTests(ExtractorTests):

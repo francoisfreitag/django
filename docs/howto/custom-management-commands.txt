@@ -58,25 +58,21 @@ look like this::
                 try:
                     poll = Poll.objects.get(pk=poll_id)
                 except Poll.DoesNotExist:
-                    raise CommandError('Poll "%s" does not exist' % poll_id)
+                    raise CommandError('Poll "%s" does not exist', poll_id)
 
                 poll.opened = False
                 poll.save()
 
-                self.stdout.write(self.style.SUCCESS('Successfully closed poll "%s"' % poll_id))
+                self.logger.info(self.style.SUCCESS('Successfully closed poll "%s"', poll_id))
 
 .. _management-commands-output:
 
 .. note::
     When you are using management commands and wish to provide console
-    output, you should write to ``self.stdout`` and ``self.stderr``,
-    instead of printing to ``stdout`` and ``stderr`` directly. By
-    using these proxies, it becomes much easier to test your custom
-    command. Note also that you don't need to end messages with a newline
-    character, it will be added automatically, unless you specify the ``ending``
-    parameter::
-
-        self.stdout.write("Unterminated line", ending='')
+    output, you should use ``self.logger`` instead of writing to ``stdout``
+    directly. By using a :class:`logging.Logger`, it becomes much easier to
+    test your custom command, as well as redirecting commands output to other
+    destination, such as an email account.
 
 The new custom command can be called using ``python manage.py closepoll
 <poll_ids>``.
@@ -230,7 +226,7 @@ All attributes can be set in your derived class and can be used in
 .. attribute:: BaseCommand.style
 
     An instance attribute that helps create colored output when writing to
-    ``stdout`` or ``stderr``. For example::
+    a terminal. For example::
 
         self.stdout.write(self.style.SUCCESS('...'))
 

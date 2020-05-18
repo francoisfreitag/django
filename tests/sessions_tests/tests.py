@@ -914,10 +914,10 @@ class CookieSessionTests(SessionTestsMixin, SimpleTestCase):
 
 class ClearSessionsCommandTests(SimpleTestCase):
     def test_clearsessions_unsupported(self):
-        msg = (
-            "Session engine 'tests.sessions_tests.no_clear_expired' doesn't "
-            "support clearing expired sessions."
-        )
+        msg = "Session engine '%s' doesn't support clearing expired sessions."
+        args = ('tests.sessions_tests.no_clear_expired',)
         with self.settings(SESSION_ENGINE='tests.sessions_tests.no_clear_expired'):
-            with self.assertRaisesMessage(management.CommandError, msg):
+            with self.assertRaises(management.CommandError) as cm:
                 management.call_command('clearsessions')
+        self.assertEqual(msg, cm.exception.message)
+        self.assertEqual(args, cm.exception.logger_args)

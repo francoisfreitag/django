@@ -17,5 +17,5 @@ class Command(BaseCommand):
         except NotImplementedError:
             raise CommandError(
                 "Session engine '%s' doesn't support clearing expired "
-                "sessions." % settings.SESSION_ENGINE
+                "sessions.", logger_args=(settings.SESSION_ENGINE,)
             )

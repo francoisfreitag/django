@@ -69,7 +69,7 @@ class TemplateCommand(BaseCommand):
             try:
                 os.makedirs(top_dir)
             except FileExistsError:
-                raise CommandError("'%s' already exists" % top_dir)
+                raise CommandError("'%s' already exists", logger_args=(top_dir,))
             except OSError as e:
                 raise CommandError(e)
         else:
@@ -78,20 +78,22 @@ class TemplateCommand(BaseCommand):
             top_dir = os.path.abspath(os.path.expanduser(target))
             if not os.path.exists(top_dir):
                 raise CommandError("Destination directory '%s' does not "
-                                   "exist, please create it first." % top_dir)
+                                   "exist, please create it first.", logger_args=(top_dir,))
 
         extensions = tuple(handle_extensions(options['extensions']))
         extra_files = []
         for file in options['files']:
             extra_files.extend(map(lambda x: x.strip(), file.split(',')))
         if self.verbosity >= 2:
-            self.stdout.write(
-                'Rendering %s template files with extensions: %s'
-                % (app_or_project, ', '.join(extensions))
+            placeholders = ', '.join(['%s'] * len(extensions))
+            self.logger.info(
+                'Rendering %s template files with extensions: {0}'.format(placeholders),
+                app_or_project, *extensions,
             )
-            self.stdout.write(
-                'Rendering %s template files with filenames: %s'
-                % (app_or_project, ', '.join(extra_files))
+            placeholders = ', '.join(['%s'] * len(extra_files))
+            self.logger.info(
+                'Rendering %s template files with filenames: {0}'.format(placeholders),
+                app_or_project, *extra_files,
             )
         base_name = '%s_name' % app_or_project
         base_subdir = '%s_template' % app_or_project
@@ -145,9 +147,8 @@ class TemplateCommand(BaseCommand):
                 if os.path.exists(new_path):
                     raise CommandError(
                         "%s already exists. Overlaying %s %s into an existing "
-                        "directory won't replace conflicting files." % (
-                            new_path, self.a_or_an, app_or_project,
-                        )
+                        "directory won't replace conflicting files.",
+                        logger_args=(new_path, self.a_or_an, app_or_project)
                     )
 
                 # Only render the Python files, as we don't want to
@@ -163,19 +164,19 @@ class TemplateCommand(BaseCommand):
                     shutil.copyfile(old_path, new_path)
 
                 if self.verbosity >= 2:
-                    self.stdout.write('Creating %s' % new_path)
+                    self.logger.info('Creating %s', new_path)
                 try:
                     shutil.copymode(old_path, new_path)
                     self.make_writeable(new_path)
                 except OSError:
-                    self.stderr.write(
+                    self.logger.error(self.style.NOTICE(
                         "Notice: Couldn't set permission bits on %s. You're "
                         "probably using an uncommon filesystem setup. No "
-                        "problem." % new_path, self.style.NOTICE)
+                        "problem."), new_path)
 
         if self.paths_to_remove:
             if self.verbosity >= 2:
-                self.stdout.write('Cleaning up temporary files.')
+                self.logger.info('Cleaning up temporary files.')
             for path_to_remove in self.paths_to_remove:
                 if os.path.isfile(path_to_remove):
                     os.remove(path_to_remove)
@@ -205,25 +206,18 @@ class TemplateCommand(BaseCommand):
             if os.path.exists(absolute_path):
                 return self.extract(absolute_path)
 
-        raise CommandError("couldn't handle %s template %s." %
-                           (self.app_or_project, template))
+        raise CommandError("couldn't handle %s template %s.",
+                           logger_args=(self.app_or_project, template))
 
     def validate_name(self, name, name_or_dir='name'):
         if name is None:
-            raise CommandError('you must provide {an} {app} name'.format(
-                an=self.a_or_an,
-                app=self.app_or_project,
-            ))
+            raise CommandError('you must provide %s %s name',
+                               logger_args=(self.a_or_an, self.app_or_project))
         # Check it's a valid directory name.
         if not name.isidentifier():
             raise CommandError(
-                "'{name}' is not a valid {app} {type}. Please make sure the "
-                "{type} is a valid identifier.".format(
-                    name=name,
-                    app=self.app_or_project,
-                    type=name_or_dir,
-                )
-            )
+                "'%s' is not a valid %s %s. Please make sure the %s is a valid identifier.",
+                logger_args=(name, self.app_or_project, name_or_dir, name_or_dir))
         # Check it cannot be imported.
         try:
             import_module(name)
@@ -231,15 +225,10 @@ class TemplateCommand(BaseCommand):
             pass
         else:
             raise CommandError(
-                "'{name}' conflicts with the name of an existing Python "
-                "module and cannot be used as {an} {app} {type}. Please try "
-                "another {type}.".format(
-                    name=name,
-                    an=self.a_or_an,
-                    app=self.app_or_project,
-                    type=name_or_dir,
-                )
-            )
+                "'%s' conflicts with the name of an existing Python "
+                "module and cannot be used as %s %s %s. Please try "
+                "another %s.",
+                logger_args=(name, self.a_or_an, self.app_or_project, name_or_dir, name_or_dir))
 
     def download(self, url):
         """
@@ -260,12 +249,12 @@ class TemplateCommand(BaseCommand):
         filename, display_url = cleanup_url(url)
 
         if self.verbosity >= 2:
-            self.stdout.write('Downloading %s' % display_url)
+            self.logger.info('Downloading %s', display_url)
         try:
             the_path, info = urlretrieve(url, os.path.join(tempdir, filename))
         except OSError as e:
-            raise CommandError("couldn't download URL %s to %s: %s" %
-                               (url, filename, e))
+            raise CommandError("couldn't download URL %s to %s: %s",
+                               logger_args=(url, filename, e))
 
         used_name = the_path.split('/')[-1]
 
@@ -314,13 +303,13 @@ class TemplateCommand(BaseCommand):
         tempdir = tempfile.mkdtemp(prefix=prefix, suffix='_extract')
         self.paths_to_remove.append(tempdir)
         if self.verbosity >= 2:
-            self.stdout.write('Extracting %s' % filename)
+            self.logger.info('Extracting %s', filename)
         try:
             archive.extract(filename, tempdir)
             return tempdir
         except (archive.ArchiveException, OSError) as e:
-            raise CommandError("couldn't extract file %s to %s: %s" %
-                               (filename, tempdir, e))
+            raise CommandError("couldn't extract file %s to %s: %s",
+                               logger_args=(filename, tempdir, e))
 
     def is_url(self, template):
         """Return True if the name looks like a URL."""

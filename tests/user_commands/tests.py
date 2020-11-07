@@ -1,4 +1,6 @@
 import os
+import warnings
+from io import StringIO
 from unittest import mock
 
 from admin_scripts.tests import AdminScriptTestCase
@@ -423,10 +425,19 @@ class CommandTests(SimpleTestCase):
 
     def test_outputwrapper_flush(self):
         out = StringIO()
-        with mock.patch.object(out, 'flush') as mocked_flush:
-            management.call_command('outputwrapper', stdout=out)
+        with warnings.catch_warnings(record=True) as recorded:
+            warnings.simplefilter('always')
+            with mock.patch.object(out, 'flush') as mocked_flush:
+                management.call_command('outputwrapper', stdout=out)
         self.assertIn('Working...', out.getvalue())
         self.assertIs(mocked_flush.called, True)
+        [w1, w2] = recorded
+        msg = (
+            "The 'stdout' and 'stderr' attributes are deprecated.\n"
+            "Use the new 'logger' attribute instead.",
+        )
+        self.assertEqual(msg, w1.message.args)
+        self.assertEqual(msg, w2.message.args)
 
 
 class CommandRunTests(AdminScriptTestCase):

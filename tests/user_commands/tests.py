@@ -365,10 +365,10 @@ class CommandTests(SimpleTestCase):
                 '--flag_false',
                 '--flag_true',
             )
-        self.assertIn(expected_output, combine_output(logs))
+        self.assertIn(expected_output, combine_logs(logs))
         with self.assertLogs('django.command') as logs:
             management.call_command('required_constant_option', **args)
-        self.assertIn(expected_output, combine_output(logs))
+        self.assertIn(expected_output, combine_logs(logs))
 
     def test_subparser(self):
         with self.assertLogs('django.command') as logs:

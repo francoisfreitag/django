@@ -227,7 +227,7 @@ class SerializersTestBase:
         self.assertEqual(objs[0].object.name, unicode_name)
 
     def test_serialize_progressbar(self):
-        with self.assertLogs('django.progress') as logs:
+        with self.assertLogs('django.command.progress') as logs:
             serializers.serialize(
                 self.serializer_name, Article.objects.all(),
                 progress=True, object_count=Article.objects.count()

@@ -577,7 +577,7 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
                 'format': 'json',
                 'output': file.name,
             }
-            with self.assertLogs('django.progress') as logs:
+            with self.assertLogs('django.command.progress') as logs:
                 management.call_command('dumpdata', 'fixtures', **options)
             self.assertLogRecords(
                 logs,
@@ -597,7 +597,7 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
 
             # Test no progress bar when verbosity = 0
             options['verbosity'] = 0
-            with self.assertNoLogs('django.progress'):
+            with self.assertNoLogs('django.command.progress'):
                 management.call_command('dumpdata', 'fixtures', **options)
 
     def test_dumpdata_proxy_without_concrete(self):
@@ -736,7 +736,7 @@ class FixtureLoadingTests(DumpDataAssertMixin, TestCase):
         )
 
     def test_loaddata_verbosity_three(self):
-        with self.assertLogs('django.progress') as progress_logs, self.assertLogs('django.command'):
+        with self.assertLogs('django.command.progress') as progress_logs, self.assertLogs('django.command'):
             management.call_command('loaddata', 'fixture1.json', verbosity=3)
         self.assertLogRecords(
             progress_logs,

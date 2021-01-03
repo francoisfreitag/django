@@ -82,7 +82,7 @@ DEFAULT_LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
-        'django.progress': {
+        'django.command.progress': {
             'handlers': ['progress'],
             'level': 'INFO',
             'propagate': False,

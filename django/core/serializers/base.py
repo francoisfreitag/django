@@ -43,7 +43,7 @@ class ProgressBar:
     progress_width = 75
 
     def __init__(self, total_count):
-        self.logger = logging.getLogger('django.progress')
+        self.logger = logging.getLogger('django.command.progress')
         self.total_count = total_count
         self.prev_done = 0
 

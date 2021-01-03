@@ -42,7 +42,8 @@ class MigrateTests(MigrationTestBase):
         self.assertTableNotExists("migrations_tribble")
         self.assertTableNotExists("migrations_book")
         # Run the migrations to 0001 only
-        with self.assertLogs('django.command') as command_logs, self.assertLogs('django.progress') as progress_logs:
+        with (self.assertLogs('django.command') as command_logs,
+              self.assertLogs('django.command.progress') as progress_logs):
             call_command('migrate', 'migrations', '0001', verbosity=1, no_color=True)
 
         self.assertLogRecords(command_logs, [
@@ -66,7 +67,8 @@ class MigrateTests(MigrationTestBase):
         self.assertTableNotExists("migrations_tribble")
         self.assertTableExists("migrations_book")
         # Unmigrate everything
-        with self.assertLogs('django.command') as command_logs, self.assertLogs('django.progress') as progress_logs:
+        with (self.assertLogs('django.command') as command_logs,
+              self.assertLogs('django.command.progress') as progress_logs):
             call_command('migrate', 'migrations', 'zero', verbosity=1, no_color=True)
         self.assertLogRecords(command_logs, [
             ('INFO', 'Operations to perform:', ()),
@@ -94,7 +96,8 @@ class MigrateTests(MigrationTestBase):
         'migrations.migrations_test_apps.migrated_app',
     ])
     def test_migrate_with_system_checks(self):
-        with self.assertLogs('django.command') as command_logs, self.assertLogs('django.progress') as progress_logs:
+        with (self.assertLogs('django.command') as command_logs,
+              self.assertLogs('django.command.progress') as progress_logs):
             call_command('migrate', skip_checks=False, no_color=True)
         self.assertLogRecords(command_logs, [
             ('INFO', 'Operations to perform:', ()),
@@ -190,9 +193,8 @@ class MigrateTests(MigrationTestBase):
             call_command("migrate", "migrations", "0001", verbosity=0)
         # Run initial migration with an explicit --fake-initial
         with mock.patch('django.core.management.color.supports_color', lambda *args: False):
-            with self.assertLogs(
-                'django.command',
-            ) as command_logs, self.assertLogs('django.progress') as progress_logs:
+            with (self.assertLogs('django.command') as command_logs,
+                  self.assertLogs('django.command.progress') as progress_logs):
                 call_command("migrate", "migrations", "0001", fake_initial=True, verbosity=1)
             call_command("migrate", "migrations", "0001", fake_initial=True, verbosity=0, database="other")
         self.assertLogRecords(command_logs, [
@@ -253,9 +255,8 @@ class MigrateTests(MigrationTestBase):
         with override_settings(MIGRATION_MODULES={
             'migrations': 'migrations.test_fake_initial_case_insensitive.fake_initial',
         }):
-            with self.assertLogs(
-                'django.command'
-            ) as command_logs, self.assertLogs('django.progress') as progress_logs:
+            with (self.assertLogs('django.command') as command_logs,
+                  self.assertLogs('django.command.progress') as progress_logs):
                 call_command('migrate', 'migrations', '0001', fake_initial=True, verbosity=1, no_color=True)
         self.assertLogRecords(command_logs, [
             ('INFO', 'Operations to perform:', ()),
@@ -279,7 +280,7 @@ class MigrateTests(MigrationTestBase):
             with (
                 mock.patch('django.core.management.color.supports_color', lambda *args: False),
                 self.assertLogs('django.command') as command_logs,
-                self.assertLogs('django.progress') as progress_logs,
+                self.assertLogs('django.command.progress') as progress_logs,
             ):
                 call_command('migrate', 'migrations', '0002', fake_initial=True, verbosity=1)
             self.assertLogRecords(command_logs, [

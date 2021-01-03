@@ -160,7 +160,7 @@ class Command(BaseCommand):
     def load_label(self, fixture_label):
         """Load fixtures files for a given label."""
         show_progress = self.verbosity >= 3
-        progress_logger = logging.getLogger('django.progress')
+        progress_logger = logging.getLogger('django.command.progress')
 
         for fixture_file, fixture_dir, fixture_name in self.find_fixtures(fixture_label):
             _, ser_fmt, cmp_fmt = self.parse_name(os.path.basename(fixture_file))

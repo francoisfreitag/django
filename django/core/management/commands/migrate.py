@@ -18,7 +18,7 @@ from django.db.migrations.state import ModelState, ProjectState
 from django.utils.module_loading import module_has_submodule
 from django.utils.text import Truncator
 
-progress_logger = logging.getLogger('django.progress')
+progress_logger = logging.getLogger('django.command.progress')
 
 
 class Command(BaseCommand):

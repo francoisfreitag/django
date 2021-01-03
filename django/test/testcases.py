@@ -730,6 +730,10 @@ class SimpleTestCase(unittest.TestCase):
             *args, **kwargs
         )
 
+    def assertLogRecords(self, logs, expected):
+        records = [(log.levelname, log.msg, log.args) for log in logs.records]
+        self.assertEqual(records, expected)
+
     def assertFieldOutput(self, fieldclass, valid, invalid, field_args=None,
                           field_kwargs=None, empty_value=''):
         """

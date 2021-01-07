@@ -1,6 +1,7 @@
 import asyncio
 import difflib
 import json
+import logging
 import posixpath
 import sys
 import threading
@@ -733,6 +734,22 @@ class SimpleTestCase(unittest.TestCase):
     def assertLogRecords(self, logs, expected):
         records = [(log.levelname, log.msg, log.args) for log in logs.records]
         self.assertEqual(records, expected)
+
+    @contextmanager
+    def assertNoLogs(self, logger_name, levelname='INFO'):
+        """
+        Assert no logs where emitted by logger_name in wrapped command.
+
+        https://bugs.python.org/issue39385
+        """
+        if isinstance(levelname, int):
+            levelname = logging.getLevelName(levelname)
+        try:
+            with self.assertLogs(logger_name, levelname):
+                yield
+        except AssertionError as e:
+            msg = e.args[0]
+            self.assertEqual(msg, 'no logs of level %s or higher triggered on %s' % (levelname, logger_name))
 
     def assertFieldOutput(self, fieldclass, valid, invalid, field_args=None,
                           field_kwargs=None, empty_value=''):
